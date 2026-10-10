@@ -69,14 +69,3 @@ cd server
 ```
 
 The API runs at http://localhost:8080.
-
-## Roadmap
-
-- [ ] **Phase 0 — Foundation:** run both apps, health endpoint, frontend ↔ backend connection
-- [ ] **Phase 1 — Manual job tracker:** create, list, edit and archive jobs with statuses, persisted in PostgreSQL
-- [ ] **Phase 2 — Profile & resume library:** verified skills and experience, base resume, versioned resumes
-- [ ] **Phase 3 — Job analysis & matching:** requirement extraction and explainable match assessment
-- [ ] **Phase 4 — Application materials:** tailored resume and cover letter drafts with preview and approval
-- [ ] **Phase 5 — Gmail integration:** OAuth, draft creation, sending only with approval
-- [ ] **Phase 6 — Scheduling & notifications:** daily digest and WhatsApp summaries
-- [ ] **Phase 7 — Reliability & multi-user:** tests, logging, backups, authentication and per-user data isolation
