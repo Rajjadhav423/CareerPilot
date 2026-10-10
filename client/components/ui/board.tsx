@@ -6,7 +6,11 @@ function Board({ className, ...props }: React.ComponentProps<"div">) {
   return (
     <div
       data-slot="board"
-      className={cn("flex items-start gap-2 overflow-x-auto pb-4", className)}
+      className={cn(
+        // Phones: each column is most of the screen and snaps into place as you swipe.
+        "flex snap-x snap-mandatory items-start gap-2 overflow-x-auto pb-4 sm:snap-none",
+        className,
+      )}
       {...props}
     />
   );
@@ -24,7 +28,10 @@ function BoardColumn({ className, title, count, empty, children, ...props }: Boa
     <section
       data-slot="board-column"
       aria-label={title}
-      className={cn("flex w-68 shrink-0 flex-col rounded-lg bg-surface-sunken", className)}
+      className={cn(
+        "flex w-[85%] shrink-0 snap-start flex-col rounded-lg bg-surface-sunken sm:w-68",
+        className,
+      )}
       {...props}
     >
       <header className="flex h-11 items-center gap-2 px-3">

@@ -20,10 +20,11 @@ const buttonVariants = cva(
         link: "h-auto px-0 bg-transparent text-link underline-offset-2 hover:underline disabled:bg-transparent",
       },
       size: {
-        default: "h-8 px-3 text-sm",
-        compact: "h-6 px-2 text-sm",
-        icon: "size-8",
-        "icon-compact": "size-6",
+        // Touch screens get finger-sized targets; mouse users keep the compact Atlassian sizes.
+        default: "h-8 px-3 text-sm pointer-coarse:h-10",
+        compact: "h-6 px-2 text-sm pointer-coarse:h-8",
+        icon: "size-8 pointer-coarse:size-10",
+        "icon-compact": "size-6 pointer-coarse:size-8",
       },
       isSelected: {
         true: "border-border-selected bg-selected text-selected-text hover:bg-selected-hovered active:bg-selected-pressed",

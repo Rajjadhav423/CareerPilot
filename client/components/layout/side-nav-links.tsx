@@ -8,7 +8,7 @@ import { Lozenge } from "@/components/ui/lozenge";
 import { navSections } from "./nav-items";
 
 const itemClass =
-  "relative flex h-8 items-center gap-2.5 rounded-sm px-2 text-sm outline-none focus-visible:ring-2 focus-visible:ring-focus [&_svg]:size-4 [&_svg]:shrink-0";
+  "relative flex h-8 pointer-coarse:h-11 items-center gap-2.5 rounded-sm px-2 text-sm outline-none focus-visible:ring-2 focus-visible:ring-focus [&_svg]:size-4 [&_svg]:shrink-0";
 
 function isActive(pathname: string | null, href: string) {
   if (!pathname) return false;

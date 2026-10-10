@@ -32,7 +32,7 @@ function DropdownMenuContent({
 }
 
 const itemClass =
-  "relative flex min-h-8 cursor-pointer items-center gap-3 px-4 py-1.5 text-sm outline-none select-none data-[highlighted]:bg-neutral-subtle-hovered data-[disabled]:pointer-events-none data-[disabled]:text-disabled [&_svg]:size-4 [&_svg]:shrink-0 [&_svg]:text-subtle";
+  "relative flex min-h-8 pointer-coarse:min-h-11 cursor-pointer items-center gap-3 px-4 py-1.5 text-sm outline-none select-none data-[highlighted]:bg-neutral-subtle-hovered data-[disabled]:pointer-events-none data-[disabled]:text-disabled [&_svg]:size-4 [&_svg]:shrink-0 [&_svg]:text-subtle";
 
 function DropdownMenuItem({
   className,

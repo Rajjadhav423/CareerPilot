@@ -37,8 +37,14 @@ export function AppShell({ header, sidebar, children }: AppShellProps) {
     const onKeyDown = (event: KeyboardEvent) => {
       if (event.key === "Escape") setMobileOpen(false);
     };
+    // Stop the page behind the drawer from scrolling.
+    const previousOverflow = document.body.style.overflow;
+    document.body.style.overflow = "hidden";
     window.addEventListener("keydown", onKeyDown);
-    return () => window.removeEventListener("keydown", onKeyDown);
+    return () => {
+      document.body.style.overflow = previousOverflow;
+      window.removeEventListener("keydown", onKeyDown);
+    };
   }, [mobileOpen]);
 
   return (

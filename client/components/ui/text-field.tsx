@@ -11,7 +11,7 @@ function TextField({ className, elemBefore, ...props }: TextFieldProps) {
     <div
       data-slot="text-field"
       className={cn(
-        "flex h-8 items-center gap-2 rounded-sm border border-border-input bg-input px-2 text-sm transition-colors hover:bg-input-hovered focus-within:border-focus focus-within:ring-1 focus-within:ring-focus has-[:disabled]:pointer-events-none has-[:disabled]:border-transparent has-[:disabled]:bg-disabled-bg",
+        "flex h-8 pointer-coarse:h-10 items-center gap-2 rounded-sm border border-border-input bg-input px-2 text-sm transition-colors hover:bg-input-hovered focus-within:border-focus focus-within:ring-1 focus-within:ring-focus has-[:disabled]:pointer-events-none has-[:disabled]:border-transparent has-[:disabled]:bg-disabled-bg",
         className,
       )}
     >
@@ -21,7 +21,8 @@ function TextField({ className, elemBefore, ...props }: TextFieldProps) {
         </span>
       )}
       <input
-        className="h-full min-w-0 flex-1 bg-transparent text-foreground outline-none placeholder:text-subtlest disabled:text-disabled disabled:placeholder:text-disabled"
+        // 16px on touch devices: iOS Safari zooms into any input smaller than that.
+        className="h-full min-w-0 flex-1 bg-transparent text-foreground outline-none pointer-coarse:text-base placeholder:text-subtlest disabled:text-disabled disabled:placeholder:text-disabled"
         {...props}
       />
     </div>

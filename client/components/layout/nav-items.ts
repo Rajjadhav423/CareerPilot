@@ -1,4 +1,12 @@
-import { Briefcase, FileText, LayoutDashboard, Settings, UserRound, type LucideIcon } from "lucide-react";
+import {
+  Briefcase,
+  FileText,
+  LayoutDashboard,
+  Search,
+  Settings,
+  UserRound,
+  type LucideIcon,
+} from "lucide-react";
 
 export type NavItem = {
   label: string;
@@ -14,6 +22,7 @@ export const navSections: NavSection[] = [
   {
     items: [
       { label: "Dashboard", href: "/", icon: LayoutDashboard },
+      { label: "Find jobs", href: "/discover", icon: Search },
       { label: "Job board", href: "/jobs", icon: Briefcase },
     ],
   },
