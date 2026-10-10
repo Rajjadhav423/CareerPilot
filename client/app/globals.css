@@ -1,26 +1,369 @@
 @import "tailwindcss";
 
-:root {
-  --background: #ffffff;
-  --foreground: #171717;
+/*
+ * Design tokens copied from the Atlassian Design System (@atlaskit/tokens v20, refreshed palette).
+ * Components use the semantic Tailwind names in @theme below (bg-surface, text-subtle, ...),
+ * never raw hex values, so theme changes happen only in this file.
+ *
+ * Theme: <html data-theme="light|dark"> is set before paint by the script in app/layout.tsx.
+ */
+:root,
+:root[data-theme="light"] {
+  color-scheme: light;
+
+  /* Surfaces (elevation) */
+  --surface: #ffffff;
+  --surface-hovered: #f0f1f2;
+  --surface-pressed: #dddee1;
+  --surface-sunken: #f8f8f8;
+  --surface-raised: #ffffff;
+  --surface-raised-hovered: #f0f1f2;
+  --surface-overlay: #ffffff;
+  --shadow-raised: 0px 1px 1px #1e1f2140, 0px 0px 1px #1e1f214f;
+  --shadow-overlay: 0px 8px 12px #1e1f2126, 0px 0px 1px #1e1f214f;
+
+  /* Text & icons */
+  --text: #292a2e;
+  --text-subtle: #505258;
+  --text-subtlest: #6b6e76;
+  --text-disabled: #080f214a;
+  --text-inverse: #ffffff;
+  --text-selected: #1868db;
+  --link: #1868db;
+
+  /* Borders */
+  --border: #0b120e24;
+  --border-bold: #7d818a;
+  --border-input: #8c8f97;
+  --border-selected: #1868db;
+  --border-focused: #4688ec;
+
+  /* Inputs */
+  --input: #ffffff;
+  --input-hovered: #f8f8f8;
+
+  /* Brand */
+  --brand: #1868db;
+  --brand-hovered: #1558bc;
+  --brand-pressed: #144794;
+
+  /* Neutral interactive */
+  --neutral: #0515240f;
+  --neutral-hovered: #0b120e24;
+  --neutral-pressed: #080f214a;
+  --neutral-subtle-hovered: #0515240f;
+  --neutral-subtle-pressed: #0b120e24;
+  --neutral-bold: #292a2e;
+  --disabled: #0515240f;
+
+  /* Selected */
+  --selected: #e9f2fe;
+  --selected-hovered: #cfe1fd;
+  --selected-pressed: #8fb8f6;
+
+  /* Semantic: subtle background / text / bold background */
+  --success: #efffd6;
+  --success-text: #4c6b1f;
+  --success-bold: #5b7f24;
+
+  --danger: #ffeceb;
+  --danger-text: #ae2e24;
+  --danger-bold: #c9372c;
+  --danger-bold-hovered: #ae2e24;
+
+  --warning: #fff5db;
+  --warning-text: #9e4c00;
+  --warning-bold: #fbc828;
+  --warning-bold-hovered: #fca700;
+  --warning-inverse: #292a2e;
+
+  --information: #e9f2fe;
+  --information-text: #1558bc;
+  --information-bold: #1868db;
+
+  --discovery: #f8eefe;
+  --discovery-text: #803fa5;
+  --discovery-bold: #964ac0;
+
+  /* Accent colours for space/avatar icons */
+  --accent-blue: #1868db;
+  --accent-green: #1f845a;
+  --accent-purple: #964ac0;
+  --accent-orange: #bd5b00;
+  --accent-teal: #227d9b;
+  --accent-red: #c9372c;
+  --accent-gray: #6b6e76;
+}
+
+:root[data-theme="dark"] {
+  color-scheme: dark;
+
+  --surface: #1f1f21;
+  --surface-hovered: #242528;
+  --surface-pressed: #2b2c2f;
+  --surface-sunken: #18191a;
+  --surface-raised: #242528;
+  --surface-raised-hovered: #2b2c2f;
+  --surface-overlay: #2b2c2f;
+  --shadow-raised: 0px 0px 0px 1px #00000000, 0px 1px 1px #01040480, 0px 0px 1px #01040480;
+  --shadow-overlay: 0px 0px 0px 1px #bdbdbd1f, 0px 8px 12px #0104045c, 0px 0px 1px 1px #01040480;
+
+  --text: #cecfd2;
+  --text-subtle: #a9abaf;
+  --text-subtlest: #96999e;
+  --text-disabled: #e5e9f640;
+  --text-inverse: #1f1f21;
+  --text-selected: #669df1;
+  --link: #669df1;
+
+  --border: #e3e4f21f;
+  --border-bold: #7e8188;
+  --border-input: #7e8188;
+  --border-selected: #669df1;
+  --border-focused: #8fb8f6;
+
+  --input: #242528;
+  --input-hovered: #2b2c2f;
+
+  --brand: #669df1;
+  --brand-hovered: #8fb8f6;
+  --brand-pressed: #adcbfb;
+
+  --neutral: #ceced912;
+  --neutral-hovered: #e3e4f21f;
+  --neutral-pressed: #e5e9f640;
+  --neutral-subtle-hovered: #ceced912;
+  --neutral-subtle-pressed: #e3e4f21f;
+  --neutral-bold: #cecfd2;
+  --disabled: #e3e4f21f;
+
+  --selected: #1c2b42;
+  --selected-hovered: #123263;
+  --selected-pressed: #1558bc;
+
+  --success: #28311b;
+  --success-text: #b3df72;
+  --success-bold: #94c748;
+
+  --danger: #42221f;
+  --danger-text: #fd9891;
+  --danger-bold: #f87168;
+  --danger-bold-hovered: #fd9891;
+
+  --warning: #3a2c1f;
+  --warning-text: #fbc828;
+  --warning-bold: #fbc828;
+  --warning-bold-hovered: #fca700;
+  --warning-inverse: #1f1f21;
+
+  --information: #1c2b42;
+  --information-text: #8fb8f6;
+  --information-bold: #669df1;
+
+  --discovery: #35243f;
+  --discovery-text: #d8a0f7;
+  --discovery-bold: #c97cf4;
+
+  --accent-blue: #669df1;
+  --accent-green: #4bce97;
+  --accent-purple: #c97cf4;
+  --accent-orange: #fca700;
+  --accent-teal: #6cc3e0;
+  --accent-red: #f87168;
+  --accent-gray: #96999e;
+}
+
+/*
+ * Accent colours (experiment): <html data-accent="..."> swaps only brand/selected/link/focus tokens.
+ * Blue is the default and needs no override. Values from @atlaskit/tokens accent ramps.
+ */
+:root[data-accent="purple"] {
+  --brand: #964ac0;
+  --brand-hovered: #803fa5;
+  --brand-pressed: #673286;
+  --selected: #f8eefe;
+  --selected-hovered: #eed7fc;
+  --selected-pressed: #e3bdfa;
+  --text-selected: #964ac0;
+  --link: #964ac0;
+  --border-selected: #964ac0;
+  --border-focused: #af59e1;
+}
+:root[data-theme="dark"][data-accent="purple"] {
+  --brand: #c97cf4;
+  --brand-hovered: #d8a0f7;
+  --brand-pressed: #e3bdfa;
+  --selected: #35243f;
+  --selected-hovered: #48245d;
+  --selected-pressed: #673286;
+  --text-selected: #c97cf4;
+  --link: #c97cf4;
+  --border-selected: #c97cf4;
+  --border-focused: #d8a0f7;
+}
+:root[data-accent="teal"] {
+  --brand: #227d9b;
+  --brand-hovered: #206a83;
+  --brand-pressed: #1a5265;
+  --selected: #e7f9ff;
+  --selected-hovered: #c6edfb;
+  --selected-pressed: #b1e4f7;
+  --text-selected: #227d9b;
+  --link: #227d9b;
+  --border-selected: #227d9b;
+  --border-focused: #2898bd;
+}
+:root[data-theme="dark"][data-accent="teal"] {
+  --brand: #6cc3e0;
+  --brand-hovered: #9dd9ee;
+  --brand-pressed: #b1e4f7;
+  --selected: #1e3137;
+  --selected-hovered: #164555;
+  --selected-pressed: #1a5265;
+  --text-selected: #6cc3e0;
+  --link: #6cc3e0;
+  --border-selected: #6cc3e0;
+  --border-focused: #9dd9ee;
+}
+:root[data-accent="green"] {
+  --brand: #1f845a;
+  --brand-hovered: #216e4e;
+  --brand-pressed: #19573d;
+  --selected: #dcfff1;
+  --selected-hovered: #baf3db;
+  --selected-pressed: #97edc9;
+  --text-selected: #1f845a;
+  --link: #1f845a;
+  --border-selected: #1f845a;
+  --border-focused: #22a06b;
+}
+:root[data-theme="dark"][data-accent="green"] {
+  --brand: #4bce97;
+  --brand-hovered: #7ee2b8;
+  --brand-pressed: #97edc9;
+  --selected: #1c3329;
+  --selected-hovered: #164b35;
+  --selected-pressed: #19573d;
+  --text-selected: #4bce97;
+  --link: #4bce97;
+  --border-selected: #4bce97;
+  --border-focused: #7ee2b8;
+}
+:root[data-accent="magenta"] {
+  --brand: #ae4787;
+  --brand-hovered: #943d73;
+  --brand-pressed: #77325b;
+  --selected: #ffecf8;
+  --selected-hovered: #fdd0ec;
+  --selected-pressed: #fcb6e1;
+  --text-selected: #ae4787;
+  --link: #ae4787;
+  --border-selected: #ae4787;
+  --border-focused: #cd519d;
+}
+:root[data-theme="dark"][data-accent="magenta"] {
+  --brand: #e774bb;
+  --brand-hovered: #f797d2;
+  --brand-pressed: #fcb6e1;
+  --selected: #3d2232;
+  --selected-hovered: #50253f;
+  --selected-pressed: #77325b;
+  --text-selected: #e774bb;
+  --link: #e774bb;
+  --border-selected: #e774bb;
+  --border-focused: #f797d2;
 }
 
 @theme inline {
-  --color-background: var(--background);
-  --color-foreground: var(--foreground);
-  --font-sans: var(--font-geist-sans);
-  --font-mono: var(--font-geist-mono);
-}
+  --font-sans: var(--font-inter), ui-sans-serif, -apple-system, system-ui, "Segoe UI", sans-serif;
+  --font-mono: var(--font-geist-mono), ui-monospace, monospace;
 
-@media (prefers-color-scheme: dark) {
-  :root {
-    --background: #0a0a0a;
-    --foreground: #ededed;
-  }
+  --color-surface: var(--surface);
+  --color-surface-hovered: var(--surface-hovered);
+  --color-surface-pressed: var(--surface-pressed);
+  --color-surface-sunken: var(--surface-sunken);
+  --color-surface-raised: var(--surface-raised);
+  --color-surface-raised-hovered: var(--surface-raised-hovered);
+  --color-surface-overlay: var(--surface-overlay);
+
+  --color-foreground: var(--text);
+  --color-subtle: var(--text-subtle);
+  --color-subtlest: var(--text-subtlest);
+  --color-disabled: var(--text-disabled);
+  --color-inverse: var(--text-inverse);
+  --color-selected-text: var(--text-selected);
+  --color-link: var(--link);
+
+  --color-border: var(--border);
+  --color-border-bold: var(--border-bold);
+  --color-border-input: var(--border-input);
+  --color-border-selected: var(--border-selected);
+  --color-focus: var(--border-focused);
+
+  --color-input: var(--input);
+  --color-input-hovered: var(--input-hovered);
+
+  --color-brand: var(--brand);
+  --color-brand-hovered: var(--brand-hovered);
+  --color-brand-pressed: var(--brand-pressed);
+
+  --color-neutral: var(--neutral);
+  --color-neutral-hovered: var(--neutral-hovered);
+  --color-neutral-pressed: var(--neutral-pressed);
+  --color-neutral-subtle-hovered: var(--neutral-subtle-hovered);
+  --color-neutral-subtle-pressed: var(--neutral-subtle-pressed);
+  --color-neutral-bold: var(--neutral-bold);
+  --color-disabled-bg: var(--disabled);
+
+  --color-selected: var(--selected);
+  --color-selected-hovered: var(--selected-hovered);
+  --color-selected-pressed: var(--selected-pressed);
+
+  --color-success: var(--success);
+  --color-success-text: var(--success-text);
+  --color-success-bold: var(--success-bold);
+
+  --color-danger: var(--danger);
+  --color-danger-text: var(--danger-text);
+  --color-danger-bold: var(--danger-bold);
+  --color-danger-bold-hovered: var(--danger-bold-hovered);
+
+  --color-warning: var(--warning);
+  --color-warning-text: var(--warning-text);
+  --color-warning-bold: var(--warning-bold);
+  --color-warning-bold-hovered: var(--warning-bold-hovered);
+  --color-warning-inverse: var(--warning-inverse);
+
+  --color-information: var(--information);
+  --color-information-text: var(--information-text);
+  --color-information-bold: var(--information-bold);
+
+  --color-discovery: var(--discovery);
+  --color-discovery-text: var(--discovery-text);
+  --color-discovery-bold: var(--discovery-bold);
+
+  --color-accent-blue: var(--accent-blue);
+  --color-accent-green: var(--accent-green);
+  --color-accent-purple: var(--accent-purple);
+  --color-accent-orange: var(--accent-orange);
+  --color-accent-teal: var(--accent-teal);
+  --color-accent-red: var(--accent-red);
+  --color-accent-gray: var(--accent-gray);
+
+  --shadow-raised: var(--shadow-raised);
+  --shadow-overlay: var(--shadow-overlay);
+
+  --radius-xs: 2px;
+  --radius-sm: 4px;
+  --radius-md: 6px;
+  --radius-lg: 8px;
+  --radius-xl: 12px;
 }
 
 body {
-  background: var(--background);
-  color: var(--foreground);
-  font-family: Arial, Helvetica, sans-serif;
+  background: var(--surface);
+  color: var(--text);
+  font-family: var(--font-sans);
+  font-size: 14px;
+  line-height: 20px;
 }
