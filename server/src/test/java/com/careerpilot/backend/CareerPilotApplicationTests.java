@@ -1,10 +1,10 @@
-package org.example.server;
+package com.careerpilot.backend;
 
 import org.junit.jupiter.api.Test;
 import org.springframework.boot.test.context.SpringBootTest;
 
 @SpringBootTest
-class ServerApplicationTests {
+class CareerPilotApplicationTests {
 
     @Test
     void contextLoads() {
