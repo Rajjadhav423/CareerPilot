@@ -1,7 +1,9 @@
 "use client";
 
+import { useState } from "react";
 import { Briefcase, Plus } from "lucide-react";
 
+import { AddJobDialog } from "@/components/jobs/add-job-dialog";
 import { Button } from "@/components/ui/button";
 import {
   DropdownMenu,
@@ -10,26 +12,30 @@ import {
   DropdownMenuLabel,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
-import { Lozenge } from "@/components/ui/lozenge";
 
-/** Jira's blue "+ Create" button. Items get enabled as features are built. */
+/** Jira's blue "+ Create" button. */
 export function CreateMenu() {
+  const [addJobOpen, setAddJobOpen] = useState(false);
+
   return (
-    <DropdownMenu>
-      <DropdownMenuTrigger asChild>
-        <Button variant="primary" aria-label="Create">
-          <Plus />
-          <span className="max-sm:hidden">Create</span>
-        </Button>
-      </DropdownMenuTrigger>
-      <DropdownMenuContent align="center" className="w-56">
-        <DropdownMenuLabel>Create</DropdownMenuLabel>
-        <DropdownMenuItem disabled>
-          <Briefcase />
-          <span className="flex-1">Job</span>
-          <Lozenge>Phase 1</Lozenge>
-        </DropdownMenuItem>
-      </DropdownMenuContent>
-    </DropdownMenu>
+    <>
+      {/* modal={false}: lets the dialog take focus cleanly after the menu closes */}
+      <DropdownMenu modal={false}>
+        <DropdownMenuTrigger asChild>
+          <Button variant="primary" aria-label="Create">
+            <Plus />
+            <span className="max-sm:hidden">Create</span>
+          </Button>
+        </DropdownMenuTrigger>
+        <DropdownMenuContent align="center" className="w-56">
+          <DropdownMenuLabel>Create</DropdownMenuLabel>
+          <DropdownMenuItem onSelect={() => setAddJobOpen(true)}>
+            <Briefcase />
+            Job
+          </DropdownMenuItem>
+        </DropdownMenuContent>
+      </DropdownMenu>
+      <AddJobDialog open={addJobOpen} onOpenChange={setAddJobOpen} />
+    </>
   );
 }

@@ -3,6 +3,7 @@ package com.careerpilot.backend.common;
 import java.util.LinkedHashMap;
 import java.util.Map;
 
+import org.springframework.dao.DataIntegrityViolationException;
 import org.springframework.http.HttpHeaders;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.HttpStatusCode;
@@ -32,6 +33,15 @@ public class GlobalExceptionHandler extends ResponseEntityExceptionHandler {
                 .forEach(error -> errors.putIfAbsent(error.getField(), error.getDefaultMessage()));
         problem.setProperty("errors", errors);
         return ResponseEntity.badRequest().body(problem);
+    }
+
+    /** A unique constraint was hit, e.g. the same posting saved twice at the same moment. */
+    @ExceptionHandler(DataIntegrityViolationException.class)
+    ResponseEntity<ProblemDetail> handleConflict(DataIntegrityViolationException ex) {
+        ProblemDetail problem = ProblemDetail.forStatusAndDetail(HttpStatus.CONFLICT,
+                "This conflicts with existing data. Refresh and try again.");
+        problem.setProperty("code", "CONFLICT");
+        return ResponseEntity.status(HttpStatus.CONFLICT).body(problem);
     }
 
     @ExceptionHandler(ApiException.class)

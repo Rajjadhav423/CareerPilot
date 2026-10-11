@@ -4,6 +4,7 @@ import { TECH_ROLES, type JobPosting, type TechRole, type WorkplaceType } from "
 import { formatRelativeTime } from "@/lib/format";
 import { Lozenge } from "@/components/ui/lozenge";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
+import { SaveJobButton } from "./save-job-button";
 
 const workplaceLozenge: Record<WorkplaceType, { label: string; appearance: "new" | "inprogress" | "default" } | null> = {
   REMOTE: { label: "Remote", appearance: "new" },
@@ -46,7 +47,10 @@ export function JobResults({ jobs }: { jobs: JobPosting[] }) {
           const posted = formatRelativeTime(job.postedAt);
           return (
             <li key={job.id} className="flex flex-col gap-1 py-3">
-              <JobLink job={job} />
+              <div className="flex items-start justify-between gap-3">
+                <JobLink job={job} />
+                <SaveJobButton posting={job} />
+              </div>
               <p className="text-sm">
                 {job.company}
                 {job.location && <span className="text-subtle"> · {job.location}</span>}
@@ -73,6 +77,9 @@ export function JobResults({ jobs }: { jobs: JobPosting[] }) {
               <TableHead>Location</TableHead>
               <TableHead>Work mode</TableHead>
               <TableHead>Posted</TableHead>
+              <TableHead>
+                <span className="sr-only">Save</span>
+              </TableHead>
             </TableRow>
           </TableHeader>
           <TableBody>
@@ -95,6 +102,9 @@ export function JobResults({ jobs }: { jobs: JobPosting[] }) {
                 </TableCell>
                 <TableCell className="whitespace-nowrap text-subtle">
                   {formatRelativeTime(job.postedAt) ?? "—"}
+                </TableCell>
+                <TableCell className="text-right">
+                  <SaveJobButton posting={job} />
                 </TableCell>
               </TableRow>
             ))}
