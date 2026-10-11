@@ -3,6 +3,8 @@
 #
 # One-time setup in GitHub (repo Settings -> Secrets and variables -> Actions):
 #   Variables: AZURE_WEBAPP_NAME             the Web App's name, e.g. careerpilot-api
+#              AZURE_WEBAPP_URL              its default domain from the Overview page, e.g.
+#                                            https://careerpilot-api-xxxx.southeastasia-01.azurewebsites.net
 #   Secrets:   AZURE_WEBAPP_PUBLISH_PROFILE  contents of the publish profile downloaded from the Web App
 # Until AZURE_WEBAPP_NAME is set, the workflow only builds and tests.
 # App settings (DB_URL, CLERK_*, CORS_ALLOWED_ORIGINS, ...) live in Azure, never in this repo.
@@ -96,7 +98,7 @@ jobs:
     runs-on: ubuntu-latest
     environment:
       name: production
-      url: https://${{ vars.AZURE_WEBAPP_NAME }}.azurewebsites.net/api/v1/health
+      url: ${{ vars.AZURE_WEBAPP_URL }}/api/v1/health
 
     steps:
       - uses: actions/download-artifact@v4
@@ -110,8 +112,9 @@ jobs:
           package: app.jar
 
       - name: Wait for the API to come up
+        if: vars.AZURE_WEBAPP_URL != ''
         run: |
-          url="https://${{ vars.AZURE_WEBAPP_NAME }}.azurewebsites.net/api/v1/health"
+          url="${{ vars.AZURE_WEBAPP_URL }}/api/v1/health"
           for attempt in $(seq 1 30); do
             if curl -fsS --max-time 10 "$url"; then echo; echo "Healthy after $attempt attempt(s)"; exit 0; fi
             sleep 10
