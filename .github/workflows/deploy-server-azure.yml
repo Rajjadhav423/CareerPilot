@@ -116,7 +116,9 @@ jobs:
         run: |
           url="${{ vars.AZURE_WEBAPP_URL }}/api/v1/health"
           for attempt in $(seq 1 30); do
-            if curl -fsS --max-time 10 "$url"; then echo; echo "Healthy after $attempt attempt(s)"; exit 0; fi
+            # Azure serves its own placeholder page (also HTTP 200) until our app is running
+            body=$(curl -fsS --max-time 10 "$url" || true)
+            if echo "$body" | grep -q '"status":"UP"'; then echo "$body"; echo "Healthy after $attempt attempt(s)"; exit 0; fi
             sleep 10
           done
           echo "The API didn't answer $url within 5 minutes. Check Log stream in the Azure portal."

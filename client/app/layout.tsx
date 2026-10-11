@@ -1,10 +1,12 @@
-import type { Metadata } from "next";
+import type { Metadata, Viewport } from "next";
 import { Geist_Mono, Inter } from "next/font/google";
 import { ClerkProvider } from "@clerk/nextjs";
 
 import { clerkAppearance } from "@/lib/clerk-appearance";
 import { ROUTES } from "@/lib/routes";
+import { SITE } from "@/lib/site";
 import { themeInitScript } from "@/lib/theme";
+import { ServiceWorkerRegistration } from "@/components/pwa/service-worker-registration";
 import "./globals.css";
 
 const inter = Inter({
@@ -23,6 +25,17 @@ export const metadata: Metadata = {
     template: "%s · CareerPilot",
   },
   description: "Personal AI job search and application manager",
+  applicationName: SITE.name,
+  // iPhone/iPad "Add to Home Screen": open full screen like an app, with this name under the icon
+  appleWebApp: { capable: true, title: SITE.name, statusBarStyle: "default" },
+};
+
+/** Browser and installed-app chrome colour: the --surface token of each theme (app/globals.css). */
+export const viewport: Viewport = {
+  themeColor: [
+    { media: "(prefers-color-scheme: light)", color: "#ffffff" },
+    { media: "(prefers-color-scheme: dark)", color: "#1f1f21" },
+  ],
 };
 
 /**
@@ -52,6 +65,7 @@ export default function RootLayout({ children }: LayoutProps<"/">) {
         >
           {children}
         </ClerkProvider>
+        <ServiceWorkerRegistration />
       </body>
     </html>
   );
