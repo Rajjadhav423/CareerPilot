@@ -1,0 +1,64 @@
+/* Modern resume: sans-serif, left-aligned header, blue accent (CareerPilot brand blue). */
+body {
+  font-family: "Inter", "Segoe UI", Arial, sans-serif;
+  font-size: 9.5pt;
+}
+
+.name {
+  font-size: 22pt;
+  font-weight: 700;
+  color: #1868db;
+}
+
+.headline {
+  margin-top: 1pt;
+  font-size: 11pt;
+  font-weight: 600;
+  color: #44474f;
+}
+
+.contact {
+  margin-top: 5pt;
+  font-size: 9pt;
+  color: #44474f;
+}
+
+.contact a,
+.entry-link {
+  color: #1868db;
+}
+
+.section {
+  margin-top: 12pt;
+}
+
+.section-title {
+  font-size: 10pt;
+  font-weight: 700;
+  text-transform: uppercase;
+  color: #1868db;
+}
+
+.section .entry:first-of-type,
+.section-title + .summary,
+.section-title + .skill,
+.section-title + .list-items {
+  margin-top: 5pt;
+}
+
+.entry-title {
+  font-weight: 600;
+}
+
+.entry-subtitle {
+  color: #44474f;
+}
+
+.entry-dates {
+  font-size: 9pt;
+  color: #44474f;
+}
+
+.entry-detail {
+  color: #44474f;
+}

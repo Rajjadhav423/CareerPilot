@@ -1,6 +1,7 @@
 import {
   Briefcase,
   FileText,
+  FolderOpen,
   LayoutDashboard,
   Mail,
   Search,
@@ -27,6 +28,8 @@ export const navSections: NavSection[] = [
       { label: "Dashboard", href: ROUTES.dashboard, icon: LayoutDashboard },
       { label: "Find jobs", href: ROUTES.discover, icon: Search },
       { label: "Job board", href: ROUTES.jobs, icon: Briefcase },
+      { label: "Resumes", href: ROUTES.resumes, icon: FileText },
+      { label: "Documents", href: ROUTES.documents, icon: FolderOpen },
       { label: "Email templates", href: ROUTES.templates, icon: Mail },
     ],
   },
@@ -34,7 +37,6 @@ export const navSections: NavSection[] = [
     title: "Coming soon",
     items: [
       { label: "Profile", href: ROUTES.profile, icon: UserRound, comingSoon: true },
-      { label: "Resumes", href: ROUTES.resumes, icon: FileText, comingSoon: true },
       { label: "Settings", href: ROUTES.settings, icon: Settings, comingSoon: true },
     ],
   },

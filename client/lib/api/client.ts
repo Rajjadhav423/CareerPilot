@@ -26,14 +26,25 @@ type ApiFetchOptions = Omit<RequestInit, "body"> & {
 
 type ProblemDetail = { detail?: string; code?: string; errors?: Record<string, string> };
 
-export async function apiFetch<T>(path: string, { token, json, ...init }: ApiFetchOptions = {}): Promise<T> {
+export async function apiFetch<T>(path: string, options: ApiFetchOptions = {}): Promise<T> {
+  const response = await apiRequest(path, "application/json", options);
+  if (response.status === 204) return undefined as T;
+  return (await response.json()) as T;
+}
+
+/** For non-JSON responses (PDF downloads, HTML previews). Errors are still ProblemDetail JSON → ApiError. */
+export async function apiFetchResponse(path: string, accept: string, options: ApiFetchOptions = {}): Promise<Response> {
+  return apiRequest(path, accept, options);
+}
+
+async function apiRequest(path: string, accept: string, { token, json, ...init }: ApiFetchOptions): Promise<Response> {
   let response: Response;
   try {
     response = await fetch(`${API_BASE_URL}${path}`, {
       ...init,
       body: json === undefined ? undefined : JSON.stringify(json),
       headers: {
-        Accept: "application/json",
+        Accept: accept,
         ...(json === undefined ? {} : { "Content-Type": "application/json" }),
         ...(token ? { Authorization: `Bearer ${token}` } : {}),
         ...init.headers,
@@ -56,7 +67,23 @@ export async function apiFetch<T>(path: string, { token, json, ...init }: ApiFet
       problem.errors ?? {},
     );
   }
+  return response;
+}
 
-  if (response.status === 204) return undefined as T;
-  return (await response.json()) as T;
+/** Saves a downloaded file using the server's suggested name (Content-Disposition), falling back to `fallbackName`. */
+export async function saveResponseAsFile(response: Response, fallbackName: string) {
+  const blob = await response.blob();
+  const disposition = response.headers.get("Content-Disposition") ?? "";
+  const encoded = /filename\*=UTF-8''([^;]+)/i.exec(disposition)?.[1];
+  const plain = /filename="?([^";]+)"?/i.exec(disposition)?.[1];
+  const name = encoded ? decodeURIComponent(encoded) : plain ?? fallbackName;
+  const url = URL.createObjectURL(blob);
+  const link = document.createElement("a");
+  link.href = url;
+  link.download = name;
+  document.body.appendChild(link);
+  link.click();
+  link.remove();
+  // Give the browser (notably iOS Safari) time to start the download before revoking
+  setTimeout(() => URL.revokeObjectURL(url), 30_000);
 }

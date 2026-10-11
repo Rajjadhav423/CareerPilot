@@ -1,0 +1,19 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<html xmlns="http://www.w3.org/1999/xhtml" xmlns:th="http://www.thymeleaf.org" lang="en"
+    th:attr="class=${'page-' + pageSize}">
+<head>
+  <meta charset="UTF-8" />
+  <title th:text="${title}">Resume</title>
+  <meta name="author" th:attr="content=${resume.name}" />
+  <meta name="subject" content="Resume" />
+  <style th:utext="${css}"></style>
+</head>
+<body class="resume resume-classic">
+  <header class="header">
+    <h1 class="name" th:text="${resume.name}">Full Name</h1>
+    <p class="headline" th:if="${resume.headline != null}" th:text="${resume.headline}">Headline</p>
+    <p th:replace="~{resume/sections :: contacts(${resume})}">Contacts</p>
+  </header>
+  <th:block th:replace="~{resume/sections :: sections(${resume})}"></th:block>
+</body>
+</html>

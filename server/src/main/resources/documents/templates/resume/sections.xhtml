@@ -1,0 +1,54 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!--
+  Shared resume fragments. Plain values use th:text / th:attr (escaped). Fields ending in "Html" come from
+  RichText, which escapes everything itself and only emits <strong>, <em> and <a href> with safe links.
+  Sections appear in the order the user chose; hidden and empty ones were removed by ResumeView.
+-->
+<fragments xmlns:th="http://www.thymeleaf.org">
+
+  <p th:fragment="contacts(resume)" class="contact" th:if="${!resume.contacts.isEmpty()}"><th:block
+      th:each="c, stat : ${resume.contacts}"><a th:if="${c.href != null}" th:attr="href=${c.href}"
+      th:text="${c.text}">link</a><span th:if="${c.href == null}" th:text="${c.text}">text</span><span
+      class="sep" th:if="${!stat.last}"> | </span></th:block></p>
+
+  <th:block th:fragment="sections(resume)">
+    <section class="section" th:each="s : ${resume.sections}">
+      <h2 class="section-title" th:text="${s.title}">Section</h2>
+
+      <th:block th:if="${s.type == 'text'}">
+        <p class="summary" th:each="paragraph : ${s.paragraphsHtml}" th:utext="${paragraph}">Text</p>
+      </th:block>
+
+      <th:block th:if="${s.type == 'entries'}">
+        <div class="entry" th:each="e : ${s.entries}" th:insert="~{resume/sections :: entry(${e})}"></div>
+      </th:block>
+
+      <ul class="list-items" th:if="${s.type == 'list'}">
+        <li th:each="item : ${s.itemsHtml}" th:utext="${item}">Item</li>
+      </ul>
+
+      <th:block th:if="${s.type == 'skills'}">
+        <p class="skill" th:each="g : ${s.skills}"><span class="skill-name" th:if="${g.name != null}"
+            th:text="${g.name + ':'}">Group:</span>
+          <span th:text="${g.keywords}">keywords</span></p>
+      </th:block>
+    </section>
+  </th:block>
+
+  <th:block th:fragment="entry(e)">
+    <div class="entry-head">
+      <div class="entry-main">
+        <h3 class="entry-title"><span th:text="${e.title}">Title</span><th:block th:if="${e.link != null}"><span
+            class="sep"> | </span><a class="entry-link" th:attr="href=${e.link.href}"
+            th:text="${e.link.text}">link</a></th:block></h3>
+        <p class="entry-subtitle" th:if="${e.subtitle != null}" th:text="${e.subtitle}">Organization</p>
+      </div>
+      <p class="entry-dates" th:if="${e.dates != null}" th:text="${e.dates}">Dates</p>
+    </div>
+    <p class="entry-description" th:if="${e.descriptionHtml != null}" th:utext="${e.descriptionHtml}">Description</p>
+    <ul class="entry-highlights" th:if="${!e.bulletsHtml.isEmpty()}">
+      <li th:each="b : ${e.bulletsHtml}" th:utext="${b}">Bullet</li>
+    </ul>
+  </th:block>
+
+</fragments>

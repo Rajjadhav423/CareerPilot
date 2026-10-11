@@ -4,9 +4,10 @@ import { useAuth, useUser } from "@clerk/nextjs";
 import { useMutation, useQuery } from "@tanstack/react-query";
 
 import { getGmailStatus } from "@/lib/api/gmail";
+import { GOOGLE_SCOPES, requestGoogleScopes } from "@/lib/google/request-scopes";
 
-/** The only Google permission CareerPilot asks for: send email as the user (it can't read the inbox). */
-export const GMAIL_SEND_SCOPE = "https://www.googleapis.com/auth/gmail.send";
+/** The Gmail permission CareerPilot asks for: send email as the user (it can't read the inbox). */
+export const GMAIL_SEND_SCOPE = GOOGLE_SCOPES.gmailSend;
 
 export const GMAIL_STATUS_KEY = ["gmail-status"] as const;
 
@@ -30,18 +31,7 @@ export function useConnectGmail() {
   return useMutation({
     mutationFn: async () => {
       if (!user) throw new Error("You're not signed in.");
-      const redirectUrl = window.location.href;
-      const google = user.externalAccounts.find((account) => account.provider === "google");
-      const account = google
-        ? await google.reauthorize({ additionalScopes: [GMAIL_SEND_SCOPE], redirectUrl })
-        : await user.createExternalAccount({
-            strategy: "oauth_google",
-            additionalScopes: [GMAIL_SEND_SCOPE],
-            redirectUrl,
-          });
-      const next = account.verification?.externalVerificationRedirectURL;
-      if (!next) throw new Error("Google didn't return a sign-in page. Try again in a moment.");
-      window.location.assign(next.href);
+      await requestGoogleScopes(user, [GMAIL_SEND_SCOPE], window.location.href);
     },
   });
 }

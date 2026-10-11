@@ -13,5 +13,10 @@ export const ROUTES = {
   templates: "/dashboard/templates",
   profile: "/dashboard/profile",
   resumes: "/dashboard/resumes",
+  resumeNew: "/dashboard/resumes/new",
+  documents: "/dashboard/documents",
   settings: "/dashboard/settings",
 } as const;
+
+/** Editor page of one saved resume. */
+export const resumePath = (id: string) => `/dashboard/resumes/${encodeURIComponent(id)}`;

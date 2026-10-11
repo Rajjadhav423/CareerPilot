@@ -26,6 +26,8 @@ import com.careerpilot.backend.common.ApiException;
 public class ClerkGoogleAccounts {
 
     public static final String GMAIL_SEND_SCOPE = "https://www.googleapis.com/auth/gmail.send";
+    /** Google Drive limited to files CareerPilot creates (see drive/). */
+    public static final String DRIVE_FILE_SCOPE = "https://www.googleapis.com/auth/drive.file";
 
     private static final Logger log = LoggerFactory.getLogger(ClerkGoogleAccounts.class);
 
@@ -35,6 +37,10 @@ public class ClerkGoogleAccounts {
         public boolean canSendGmail() {
             return approvedScopes.contains(GMAIL_SEND_SCOPE);
         }
+
+        public boolean hasScope(String scope) {
+            return approvedScopes.contains(scope);
+        }
     }
 
     /** A short-lived Google access token. {@link #toString()} is redacted so it can't leak into logs. */
@@ -42,6 +48,10 @@ public class ClerkGoogleAccounts {
 
         public boolean canSendGmail() {
             return scopes.contains(GMAIL_SEND_SCOPE);
+        }
+
+        public boolean hasScope(String scope) {
+            return scopes.contains(scope);
         }
 
         @Override
