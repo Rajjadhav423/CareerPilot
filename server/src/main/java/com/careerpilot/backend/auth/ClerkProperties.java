@@ -9,12 +9,15 @@ import org.springframework.boot.context.properties.bind.DefaultValue;
  * @param issuer            Clerk Frontend API URL, e.g. https://xxxx.clerk.accounts.dev (the token's "iss")
  * @param authorizedParties frontend origins allowed in the token's "azp" claim
  * @param webhookSecret     signing secret of the Clerk webhook endpoint ("whsec_..."); blank = webhooks disabled
+ * @param secretKey         Clerk secret key ("sk_..."), used server-side only to fetch the user's Google token for
+ *                          Gmail; blank = Gmail sending disabled. Never sent to the frontend.
  */
 @ConfigurationProperties("careerpilot.clerk")
 public record ClerkProperties(
         String issuer,
         @DefaultValue("http://localhost:3000") List<String> authorizedParties,
-        String webhookSecret) {
+        String webhookSecret,
+        String secretKey) {
 
     /** Fail at startup, not on the first request, if CLERK_ISSUER is missing or not a URL. */
     public ClerkProperties {
@@ -27,6 +30,18 @@ public record ClerkProperties(
     /** Clerk publishes its public signing keys here. */
     public String jwksUri() {
         return stripTrailingSlash(issuer) + "/.well-known/jwks.json";
+    }
+
+    public boolean hasSecretKey() {
+        return secretKey != null && !secretKey.isBlank();
+    }
+
+    /** Never print the secret key. */
+    @Override
+    public String toString() {
+        return "ClerkProperties[issuer=" + issuer + ", authorizedParties=" + authorizedParties
+                + ", webhookSecret=" + (webhookSecret == null || webhookSecret.isBlank() ? "<unset>" : "<set>")
+                + ", secretKey=" + (hasSecretKey() ? "<set>" : "<unset>") + "]";
     }
 
     public String normalisedIssuer() {

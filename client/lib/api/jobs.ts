@@ -20,6 +20,8 @@ export type Job = {
   source: string;
   /** The Find-jobs posting id when saved from there */
   externalId: string | null;
+  /** When an application email was sent (set by the server only after Gmail accepted it) */
+  appliedAt: string | null;
   createdAt: string;
   updatedAt: string;
 };

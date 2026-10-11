@@ -63,13 +63,15 @@ public final class JobDtos {
             boolean archived,
             String source,
             String externalId,
+            Instant appliedAt,
             Instant createdAt,
             Instant updatedAt) {
 
         static JobResponse from(Job job) {
             return new JobResponse(job.getId(), job.getTitle(), job.getCompany(), job.getLocation(),
                     job.getWorkMode(), job.getJobUrl(), job.getDescription(), job.getNotes(), job.getStatus(),
-                    job.isArchived(), job.getSource(), job.getExternalId(), job.getCreatedAt(), job.getUpdatedAt());
+                    job.isArchived(), job.getSource(), job.getExternalId(), job.getAppliedAt(), job.getCreatedAt(),
+                    job.getUpdatedAt());
         }
     }
 }

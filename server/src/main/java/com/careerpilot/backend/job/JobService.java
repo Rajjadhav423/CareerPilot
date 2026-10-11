@@ -1,6 +1,9 @@
 package com.careerpilot.backend.job;
 
+import java.time.Instant;
+import java.util.EnumSet;
 import java.util.List;
+import java.util.Set;
 import java.util.Locale;
 import java.util.UUID;
 
@@ -17,6 +20,10 @@ import com.careerpilot.backend.job.JobDtos.UpdateJobRequest;
 public class JobService {
 
     static final String MANUAL_SOURCE = "MANUAL";
+
+    /** Statuses that move to APPLIED when an application email is sent; later stages are never moved back. */
+    private static final Set<JobStatus> BEFORE_APPLIED = EnumSet.of(JobStatus.SAVED, JobStatus.TO_REVIEW,
+            JobStatus.PREPARING);
 
     private final JobRepository jobs;
 
@@ -95,6 +102,17 @@ public class JobService {
         if (request.archived() != null) {
             job.setArchived(request.archived());
         }
+        return jobs.saveAndFlush(job);
+    }
+
+    /** Called only after Gmail accepted an application email for this job. */
+    @Transactional
+    public Job recordApplicationSent(UUID userId, UUID jobId, Instant sentAt) {
+        Job job = get(userId, jobId);
+        if (BEFORE_APPLIED.contains(job.getStatus())) {
+            job.setStatus(JobStatus.APPLIED);
+        }
+        job.markApplied(sentAt);
         return jobs.saveAndFlush(job);
     }
 

@@ -125,6 +125,10 @@ class DiscoveryServiceTest {
                 .hasMessageContaining("Unknown job board provider 'monster'");
         assertThatThrownBy(() -> service("greenhouse:acme"))
                 .hasMessageContaining("Expected format provider:slug:Company Name");
+        assertThatThrownBy(() -> service("greenhouse:../../admin:Acme"))
+                .hasMessageContaining("Invalid job board slug");
+        assertThatThrownBy(() -> service("lever:evil.example.com/x:Acme"))
+                .hasMessageContaining("Invalid job board slug");
     }
 
     private static JobPosting posting(String id, String title, String company, String location,

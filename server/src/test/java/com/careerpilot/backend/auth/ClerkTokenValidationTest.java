@@ -30,7 +30,7 @@ import org.springframework.security.oauth2.jwt.NimbusJwtDecoder;
 class ClerkTokenValidationTest {
 
     private static final String ISSUER = "https://test-instance.clerk.accounts.dev";
-    private static final ClerkProperties CLERK = new ClerkProperties(ISSUER + "/", List.of("http://localhost:3000"), null);
+    private static final ClerkProperties CLERK = new ClerkProperties(ISSUER + "/", List.of("http://localhost:3000"), null, null);
 
     private static KeyPair clerkKeys;
     private static KeyPair attackerKeys;
@@ -89,10 +89,10 @@ class ClerkTokenValidationTest {
 
     @Test
     void missingOrUnresolvedIssuerFailsFast() {
-        assertThatThrownBy(() -> new ClerkProperties("${CLERK_ISSUER}", List.of(), null))
+        assertThatThrownBy(() -> new ClerkProperties("${CLERK_ISSUER}", List.of(), null, null))
                 .isInstanceOf(IllegalStateException.class)
                 .hasMessageContaining("Set CLERK_ISSUER");
-        assertThatThrownBy(() -> new ClerkProperties(null, List.of(), null)).isInstanceOf(IllegalStateException.class);
+        assertThatThrownBy(() -> new ClerkProperties(null, List.of(), null, null)).isInstanceOf(IllegalStateException.class);
     }
 
     private static JWTClaimsSet.Builder claims() {

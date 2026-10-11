@@ -64,6 +64,8 @@ public class Job {
     @Column(nullable = false)
     private boolean archived;
 
+    private Instant appliedAt;
+
     @Column(nullable = false, updatable = false)
     private Instant createdAt;
 
@@ -130,6 +132,13 @@ public class Job {
         this.archived = archived;
     }
 
+    /** First time an application was sent; later sends keep the original date. */
+    void markApplied(Instant when) {
+        if (appliedAt == null) {
+            appliedAt = when;
+        }
+    }
+
     public UUID getId() {
         return id;
     }
@@ -180,6 +189,10 @@ public class Job {
 
     public boolean isArchived() {
         return archived;
+    }
+
+    public Instant getAppliedAt() {
+        return appliedAt;
     }
 
     public Instant getCreatedAt() {

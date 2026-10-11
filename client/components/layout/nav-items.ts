@@ -2,6 +2,7 @@ import {
   Briefcase,
   FileText,
   LayoutDashboard,
+  Mail,
   Search,
   Settings,
   UserRound,
@@ -26,6 +27,7 @@ export const navSections: NavSection[] = [
       { label: "Dashboard", href: ROUTES.dashboard, icon: LayoutDashboard },
       { label: "Find jobs", href: ROUTES.discover, icon: Search },
       { label: "Job board", href: ROUTES.jobs, icon: Briefcase },
+      { label: "Email templates", href: ROUTES.templates, icon: Mail },
     ],
   },
   {
