@@ -1,0 +1,120 @@
+# Backend CI/CD: on every push to main that touches server/, run the tests against a throwaway
+# PostgreSQL and, if they pass, deploy the Spring Boot jar to Azure App Service (Linux, Java SE 21).
+#
+# One-time setup in GitHub (repo Settings -> Secrets and variables -> Actions):
+#   Variables: AZURE_WEBAPP_NAME             the Web App's name, e.g. careerpilot-api
+#   Secrets:   AZURE_WEBAPP_PUBLISH_PROFILE  contents of the publish profile downloaded from the Web App
+# Until AZURE_WEBAPP_NAME is set, the workflow only builds and tests.
+# App settings (DB_URL, CLERK_*, CORS_ALLOWED_ORIGINS, ...) live in Azure, never in this repo.
+
+name: Backend - test and deploy to Azure
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - "server/**"
+      - ".github/workflows/deploy-server-azure.yml"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: deploy-server
+  cancel-in-progress: false
+
+jobs:
+  build:
+    name: Test and build
+    runs-on: ubuntu-latest
+
+    services:
+      postgres:
+        image: postgres:17
+        env:
+          POSTGRES_USER: careerpilot
+          # Only for this throwaway CI container; it is never reachable from outside the job
+          POSTGRES_PASSWORD: ci-only-password
+          POSTGRES_DB: careerpilot_test
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U careerpilot"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 10
+
+    defaults:
+      run:
+        working-directory: server
+
+    env:
+      DB_TEST_URL: jdbc:postgresql://localhost:5432/careerpilot_test
+      DB_USERNAME: careerpilot
+      DB_PASSWORD: ci-only-password
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: "21"
+
+      - uses: gradle/actions/setup-gradle@v4
+
+      - name: Run tests and build the jar
+        run: |
+          chmod +x gradlew
+          ./gradlew test bootJar --no-daemon
+
+      - name: Pick the runnable jar
+        run: |
+          jar=$(find build/libs -name '*.jar' ! -name '*-plain.jar' | head -n 1)
+          test -n "$jar"
+          cp "$jar" app.jar
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: server-jar
+          path: server/app.jar
+          retention-days: 7
+
+      - name: Keep test reports when something fails
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: test-reports
+          path: server/build/reports/tests/test
+          retention-days: 7
+
+  deploy:
+    name: Deploy to Azure App Service
+    needs: build
+    if: vars.AZURE_WEBAPP_NAME != ''
+    runs-on: ubuntu-latest
+    environment:
+      name: production
+      url: https://${{ vars.AZURE_WEBAPP_NAME }}.azurewebsites.net/api/v1/health
+
+    steps:
+      - uses: actions/download-artifact@v4
+        with:
+          name: server-jar
+
+      - uses: azure/webapps-deploy@v3
+        with:
+          app-name: ${{ vars.AZURE_WEBAPP_NAME }}
+          publish-profile: ${{ secrets.AZURE_WEBAPP_PUBLISH_PROFILE }}
+          package: app.jar
+
+      - name: Wait for the API to come up
+        run: |
+          url="https://${{ vars.AZURE_WEBAPP_NAME }}.azurewebsites.net/api/v1/health"
+          for attempt in $(seq 1 30); do
+            if curl -fsS --max-time 10 "$url"; then echo; echo "Healthy after $attempt attempt(s)"; exit 0; fi
+            sleep 10
+          done
+          echo "The API didn't answer $url within 5 minutes. Check Log stream in the Azure portal."
+          exit 1
