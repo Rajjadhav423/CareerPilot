@@ -8,6 +8,7 @@ import { ApiError } from "@/lib/api/client";
 import type { Job } from "@/lib/api/jobs";
 import { JOB_STATUSES, type JobStatus } from "@/lib/jobs/statuses";
 import { useJobs } from "@/lib/jobs/use-jobs";
+import { ROUTES } from "@/lib/routes";
 import { Board, BoardColumn } from "@/components/ui/board";
 import { Button } from "@/components/ui/button";
 import { EmptyState } from "@/components/ui/empty-state";
@@ -63,7 +64,7 @@ export function JobBoard() {
           actions={
             <>
               <Button asChild variant="primary">
-                <Link href="/discover">
+                <Link href={ROUTES.discover}>
                   <Search /> Find jobs
                 </Link>
               </Button>

@@ -1,5 +1,7 @@
 import Image from "next/image";
+import Link from "next/link";
 
+import { ROUTES } from "@/lib/routes";
 import logo from "@/app/icon.png";
 import { ThemeMenu } from "@/components/layout/theme-menu";
 import { TooltipProvider } from "@/components/ui/tooltip";
@@ -12,10 +14,13 @@ export default function AuthLayout({ children }: LayoutProps<"/">) {
         <div className="absolute top-3 right-3">
           <ThemeMenu />
         </div>
-        <div className="mb-6 flex items-center gap-2.5">
+        <Link
+          href={ROUTES.home}
+          className="mb-6 flex items-center gap-2.5 rounded-sm outline-none focus-visible:ring-2 focus-visible:ring-focus"
+        >
           <Image src={logo} alt="" width={36} height={36} />
           <span className="text-2xl font-semibold text-foreground">CareerPilot</span>
-        </div>
+        </Link>
         <main className="flex w-full justify-center">{children}</main>
         <p className="mt-6 max-w-sm text-center text-xs text-subtlest">
           Your personal job search assistant: find tech jobs, track applications, prepare better.

@@ -6,6 +6,7 @@ import { BookmarkPlus, Check } from "lucide-react";
 import type { JobPosting } from "@/lib/api/discover";
 import type { CreateJobInput } from "@/lib/api/jobs";
 import { useCreateJob, useJobs } from "@/lib/jobs/use-jobs";
+import { ROUTES } from "@/lib/routes";
 import { Button } from "@/components/ui/button";
 
 function toJobInput(posting: JobPosting): CreateJobInput {
@@ -29,7 +30,7 @@ export function SaveJobButton({ posting }: { posting: JobPosting }) {
   if (saved) {
     return (
       <Button asChild size="compact" isSelected>
-        <Link href="/jobs" title="On your job board">
+        <Link href={ROUTES.jobs} title="On your job board">
           <Check /> Saved
         </Link>
       </Button>

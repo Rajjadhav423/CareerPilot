@@ -8,6 +8,8 @@ import {
   type LucideIcon,
 } from "lucide-react";
 
+import { ROUTES } from "@/lib/routes";
+
 export type NavItem = {
   label: string;
   href: string;
@@ -21,17 +23,17 @@ export type NavSection = { title?: string; items: NavItem[] };
 export const navSections: NavSection[] = [
   {
     items: [
-      { label: "Dashboard", href: "/", icon: LayoutDashboard },
-      { label: "Find jobs", href: "/discover", icon: Search },
-      { label: "Job board", href: "/jobs", icon: Briefcase },
+      { label: "Dashboard", href: ROUTES.dashboard, icon: LayoutDashboard },
+      { label: "Find jobs", href: ROUTES.discover, icon: Search },
+      { label: "Job board", href: ROUTES.jobs, icon: Briefcase },
     ],
   },
   {
     title: "Coming soon",
     items: [
-      { label: "Profile", href: "/profile", icon: UserRound, comingSoon: true },
-      { label: "Resumes", href: "/resumes", icon: FileText, comingSoon: true },
-      { label: "Settings", href: "/settings", icon: Settings, comingSoon: true },
+      { label: "Profile", href: ROUTES.profile, icon: UserRound, comingSoon: true },
+      { label: "Resumes", href: ROUTES.resumes, icon: FileText, comingSoon: true },
+      { label: "Settings", href: ROUTES.settings, icon: Settings, comingSoon: true },
     ],
   },
 ];

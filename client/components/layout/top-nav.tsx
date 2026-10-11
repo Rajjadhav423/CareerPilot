@@ -3,6 +3,7 @@ import Link from "next/link";
 import { Search } from "lucide-react";
 import { UserButton } from "@clerk/nextjs";
 
+import { ROUTES } from "@/lib/routes";
 import logo from "@/app/icon.png";
 import { TextField } from "@/components/ui/text-field";
 import { CreateMenu } from "./create-menu";
@@ -15,7 +16,7 @@ export function TopNav() {
       <div className="flex shrink-0 items-center gap-1 md:w-64">
         <SidebarToggle />
         <Link
-          href="/"
+          href={ROUTES.dashboard}
           className="flex items-center gap-2 rounded-sm px-1.5 py-1 outline-none hover:bg-neutral-subtle-hovered focus-visible:ring-2 focus-visible:ring-focus"
         >
           <Image src={logo} alt="" width={24} height={24} />

@@ -3,6 +3,7 @@ import { Geist_Mono, Inter } from "next/font/google";
 import { ClerkProvider } from "@clerk/nextjs";
 
 import { clerkAppearance } from "@/lib/clerk-appearance";
+import { ROUTES } from "@/lib/routes";
 import { themeInitScript } from "@/lib/theme";
 import "./globals.css";
 
@@ -24,7 +25,10 @@ export const metadata: Metadata = {
   description: "Personal AI job search and application manager",
 };
 
-/** Root: fonts, theme and Clerk. The signed-in shell lives in app/(app)/layout.tsx, auth pages in app/(auth). */
+/**
+ * Root: fonts, theme and Clerk.
+ * app/(marketing): public pages · app/(auth): sign-in/up · app/(app): the signed-in app under /dashboard
+ */
 export default function RootLayout({ children }: LayoutProps<"/">) {
   return (
     // data-theme is set by themeInitScript before paint, so React must ignore the mismatch.
@@ -39,9 +43,12 @@ export default function RootLayout({ children }: LayoutProps<"/">) {
       <body className="flex min-h-full flex-col">
         <ClerkProvider
           appearance={clerkAppearance}
-          signInUrl="/sign-in"
-          signUpUrl="/sign-up"
-          afterSignOutUrl="/sign-in"
+          signInUrl={ROUTES.signIn}
+          signUpUrl={ROUTES.signUp}
+          // Where to go after signing in/up when no specific page was requested
+          signInFallbackRedirectUrl={ROUTES.dashboard}
+          signUpFallbackRedirectUrl={ROUTES.dashboard}
+          afterSignOutUrl={ROUTES.home}
         >
           {children}
         </ClerkProvider>

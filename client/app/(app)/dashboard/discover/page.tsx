@@ -1,5 +1,6 @@
 import type { Metadata } from "next";
 
+import { ROUTES } from "@/lib/routes";
 import { JobSearch } from "@/components/discover/job-search";
 import { PageHeader } from "@/components/ui/page-header";
 
@@ -12,7 +13,7 @@ export default function FindJobsPage() {
     <>
       <PageHeader
         title="Find jobs"
-        breadcrumbs={[{ label: "CareerPilot", href: "/" }, { label: "Find jobs" }]}
+        breadcrumbs={[{ label: "CareerPilot", href: ROUTES.dashboard }, { label: "Find jobs" }]}
         description="Live tech openings from company career boards (Greenhouse, Lever, Ashby). Non-tech roles are filtered out. Refreshed every 15 minutes."
       />
       <JobSearch />

@@ -5,6 +5,7 @@ import { Briefcase, Search } from "lucide-react";
 
 import { JOB_STATUSES } from "@/lib/jobs/statuses";
 import { useJobs } from "@/lib/jobs/use-jobs";
+import { ROUTES } from "@/lib/routes";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { EmptyState } from "@/components/ui/empty-state";
@@ -21,7 +22,7 @@ export function JobsSummary() {
         <CardTitle>Your pipeline</CardTitle>
         {jobs && jobs.length > 0 && (
           <Button asChild size="compact" variant="link">
-            <Link href="/jobs">Open job board</Link>
+            <Link href={ROUTES.jobs}>Open job board</Link>
           </Button>
         )}
       </CardHeader>
@@ -41,7 +42,7 @@ export function JobsSummary() {
             description="Save openings from Find jobs or add your own, then move them from Saved to Applied to Offer."
             actions={
               <Button asChild variant="primary">
-                <Link href="/discover">
+                <Link href={ROUTES.discover}>
                   <Search /> Find jobs
                 </Link>
               </Button>

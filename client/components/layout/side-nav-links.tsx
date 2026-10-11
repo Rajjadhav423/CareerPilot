@@ -5,6 +5,7 @@ import { usePathname } from "next/navigation";
 
 import { cn } from "@/lib/utils";
 import { Lozenge } from "@/components/ui/lozenge";
+import { ROUTES } from "@/lib/routes";
 import { navSections } from "./nav-items";
 
 const itemClass =
@@ -12,7 +13,8 @@ const itemClass =
 
 function isActive(pathname: string | null, href: string) {
   if (!pathname) return false;
-  return href === "/" ? pathname === "/" : pathname.startsWith(href);
+  // The overview is the prefix of every app page, so it only matches exactly.
+  return href === ROUTES.dashboard ? pathname === href : pathname.startsWith(href);
 }
 
 /** Sidebar links with the current page highlighted. */
