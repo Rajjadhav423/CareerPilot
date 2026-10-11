@@ -1,6 +1,7 @@
 package com.careerpilot.backend.discovery;
 
 import static org.mockito.BDDMockito.given;
+import static org.springframework.security.test.web.servlet.request.SecurityMockMvcRequestPostProcessors.jwt;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
@@ -12,12 +13,16 @@ import java.util.Map;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.webmvc.test.autoconfigure.WebMvcTest;
+import org.springframework.context.annotation.Import;
+import org.springframework.security.oauth2.jwt.JwtDecoder;
 import org.springframework.test.context.bean.override.mockito.MockitoBean;
 import org.springframework.test.web.servlet.MockMvc;
 
+import com.careerpilot.backend.auth.SecurityConfig;
 import com.careerpilot.backend.discovery.DiscoverResponse.SourceStatus;
 
 @WebMvcTest(DiscoveryController.class)
+@Import(SecurityConfig.class)
 class DiscoveryControllerTest {
 
     @Autowired
@@ -25,6 +30,9 @@ class DiscoveryControllerTest {
 
     @MockitoBean
     private DiscoveryService discoveryService;
+
+    @MockitoBean
+    private JwtDecoder jwtDecoder;
 
     @Test
     void returnsMatchingJobsAndSourceStatus() throws Exception {
@@ -37,7 +45,7 @@ class DiscoveryControllerTest {
 
         mockMvc.perform(get("/api/v1/discover/jobs")
                         .param("q", "backend").param("location", "bengaluru").param("role", "BACKEND")
-                        .param("limit", "50").param("refresh", "true"))
+                        .param("limit", "50").param("refresh", "true").with(jwt()))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.total").value(1))
                 .andExpect(jsonPath("$.fetchedAt").value("2026-10-11T10:00:00Z"))
@@ -54,14 +62,19 @@ class DiscoveryControllerTest {
         given(discoveryService.search("", "", null, 100, false)).willReturn(
                 new DiscoverResponse(List.of(), 0, Map.of(), Instant.parse("2026-10-11T10:00:00Z"), List.of()));
 
-        mockMvc.perform(get("/api/v1/discover/jobs"))
+        mockMvc.perform(get("/api/v1/discover/jobs").with(jwt()))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.total").value(0));
     }
 
     @Test
     void unknownRoleIsBadRequest() throws Exception {
-        mockMvc.perform(get("/api/v1/discover/jobs").param("role", "PLUMBER"))
+        mockMvc.perform(get("/api/v1/discover/jobs").param("role", "PLUMBER").with(jwt()))
                 .andExpect(status().isBadRequest());
+    }
+
+    @Test
+    void requiresLogin() throws Exception {
+        mockMvc.perform(get("/api/v1/discover/jobs")).andExpect(status().isUnauthorized());
     }
 }

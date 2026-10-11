@@ -1,10 +1,9 @@
 import type { Metadata } from "next";
 import { Geist_Mono, Inter } from "next/font/google";
+import { ClerkProvider } from "@clerk/nextjs";
 
+import { clerkAppearance } from "@/lib/clerk-appearance";
 import { themeInitScript } from "@/lib/theme";
-import { AppShell } from "@/components/layout/app-shell";
-import { SideNav } from "@/components/layout/side-nav";
-import { TopNav } from "@/components/layout/top-nav";
 import "./globals.css";
 
 const inter = Inter({
@@ -25,6 +24,7 @@ export const metadata: Metadata = {
   description: "Personal AI job search and application manager",
 };
 
+/** Root: fonts, theme and Clerk. The signed-in shell lives in app/(app)/layout.tsx, auth pages in app/(auth). */
 export default function RootLayout({ children }: LayoutProps<"/">) {
   return (
     // data-theme is set by themeInitScript before paint, so React must ignore the mismatch.
@@ -37,9 +37,14 @@ export default function RootLayout({ children }: LayoutProps<"/">) {
         <script dangerouslySetInnerHTML={{ __html: themeInitScript }} />
       </head>
       <body className="flex min-h-full flex-col">
-        <AppShell header={<TopNav />} sidebar={<SideNav />}>
+        <ClerkProvider
+          appearance={clerkAppearance}
+          signInUrl="/sign-in"
+          signUpUrl="/sign-up"
+          afterSignOutUrl="/sign-in"
+        >
           {children}
-        </AppShell>
+        </ClerkProvider>
       </body>
     </html>
   );

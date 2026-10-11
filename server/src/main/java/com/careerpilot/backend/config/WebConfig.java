@@ -1,24 +1,32 @@
 package com.careerpilot.backend.config;
 
+import java.util.List;
+
 import org.springframework.beans.factory.annotation.Value;
+import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
-import org.springframework.web.servlet.config.annotation.CorsRegistry;
-import org.springframework.web.servlet.config.annotation.WebMvcConfigurer;
+import org.springframework.web.cors.CorsConfiguration;
+import org.springframework.web.cors.CorsConfigurationSource;
+import org.springframework.web.cors.UrlBasedCorsConfigurationSource;
 
+/**
+ * CORS for calls from the frontend's origin, applied by Spring Security ({@code http.cors()}).
+ * The frontend sends the Clerk session token in the Authorization header, so that header is allowed;
+ * no cookies are used, so credentials stay off.
+ */
 @Configuration
-public class WebConfig implements WebMvcConfigurer {
+public class WebConfig {
 
-    private final String[] allowedOrigins;
-
-    public WebConfig(@Value("${careerpilot.cors.allowed-origins}") String[] allowedOrigins) {
-        this.allowedOrigins = allowedOrigins;
-    }
-
-    @Override
-    public void addCorsMappings(CorsRegistry registry) {
-        registry.addMapping("/api/**")
-                .allowedOrigins(allowedOrigins)
-                .allowedMethods("GET", "POST", "PATCH", "DELETE", "OPTIONS");
+    @Bean
+    CorsConfigurationSource corsConfigurationSource(
+            @Value("${careerpilot.cors.allowed-origins}") List<String> allowedOrigins) {
+        CorsConfiguration config = new CorsConfiguration();
+        config.setAllowedOrigins(allowedOrigins);
+        config.setAllowedMethods(List.of("GET", "POST", "PATCH", "DELETE", "OPTIONS"));
+        config.setAllowedHeaders(List.of("Content-Type", "Authorization"));
+        UrlBasedCorsConfigurationSource source = new UrlBasedCorsConfigurationSource();
+        source.registerCorsConfiguration("/api/**", config);
+        return source;
     }
 
 }

@@ -12,18 +12,30 @@ export class ApiError extends Error {
   }
 }
 
-export async function apiFetch<T>(path: string, init?: RequestInit): Promise<T> {
+type ApiFetchOptions = RequestInit & {
+  /** Clerk session token. Required for every endpoint except health. */
+  token?: string | null;
+};
+
+export async function apiFetch<T>(path: string, { token, ...init }: ApiFetchOptions = {}): Promise<T> {
   let response: Response;
   try {
     response = await fetch(`${API_BASE_URL}${path}`, {
       ...init,
-      headers: { Accept: "application/json", ...init?.headers },
+      headers: {
+        Accept: "application/json",
+        ...(token ? { Authorization: `Bearer ${token}` } : {}),
+        ...init.headers,
+      },
     });
   } catch (error) {
     if (error instanceof DOMException && error.name === "AbortError") throw error;
     throw new ApiError(`Cannot reach the CareerPilot server at ${API_BASE_URL}.`, 0);
   }
 
+  if (response.status === 401) {
+    throw new ApiError("Your session has expired. Please sign in again.", 401);
+  }
   if (!response.ok) {
     throw new ApiError(`Request failed with status ${response.status}.`, response.status);
   }

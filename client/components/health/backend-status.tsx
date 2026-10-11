@@ -2,9 +2,11 @@
 
 import { useEffect, useState } from "react";
 import { RefreshCw } from "lucide-react";
+import { useAuth } from "@clerk/nextjs";
 
 import { API_BASE_URL, ApiError } from "@/lib/api/client";
 import { getHealth, type HealthResponse } from "@/lib/api/health";
+import { getMe, type Me } from "@/lib/api/me";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Lozenge } from "@/components/ui/lozenge";
@@ -13,13 +15,22 @@ import { Spinner } from "@/components/ui/spinner";
 
 type Status =
   | { kind: "loading" }
-  | { kind: "up"; data: HealthResponse; checkedAt: Date }
+  | { kind: "up"; data: HealthResponse; account: AccountCheck; checkedAt: Date }
   | { kind: "down"; message: string; checkedAt: Date };
 
-async function loadStatus(signal?: AbortSignal): Promise<Status> {
+/** Whether the API accepts our Clerk session token (GET /api/v1/me). */
+type AccountCheck = { ok: true; me: Me } | { ok: false; message: string };
+
+async function loadStatus(getToken: () => Promise<string | null>, signal?: AbortSignal): Promise<Status> {
   try {
     const data = await getHealth(signal);
-    return { kind: "up", data, checkedAt: new Date() };
+    let account: AccountCheck;
+    try {
+      account = { ok: true, me: await getMe(await getToken()) };
+    } catch (error) {
+      account = { ok: false, message: error instanceof ApiError ? error.message : "Unexpected error." };
+    }
+    return { kind: "up", data, account, checkedAt: new Date() };
   } catch (error) {
     const message = error instanceof ApiError ? error.message : "Unexpected error.";
     return { kind: "down", message, checkedAt: new Date() };
@@ -27,19 +38,22 @@ async function loadStatus(signal?: AbortSignal): Promise<Status> {
 }
 
 export function BackendStatus() {
+  const { getToken, isLoaded } = useAuth();
   const [status, setStatus] = useState<Status>({ kind: "loading" });
 
   useEffect(() => {
+    // Wait for Clerk: before it loads there is no session token yet.
+    if (!isLoaded) return;
     const controller = new AbortController();
-    loadStatus(controller.signal).then((next) => {
+    loadStatus(getToken, controller.signal).then((next) => {
       if (!controller.signal.aborted) setStatus(next);
     });
     return () => controller.abort();
-  }, []);
+  }, [getToken, isLoaded]);
 
   function refresh() {
     setStatus({ kind: "loading" });
-    loadStatus().then(setStatus);
+    loadStatus(getToken).then(setStatus);
   }
 
   return (
@@ -75,6 +89,22 @@ export function BackendStatus() {
             </dd>
             <dt className="text-subtle">Service</dt>
             <dd className="font-mono text-xs leading-5">{status.data.service}</dd>
+            <dt className="text-subtle">Signed in to API</dt>
+            <dd className="min-w-0">
+              {status.account.ok ? (
+                <span className="flex flex-wrap items-center gap-1.5">
+                  <Lozenge appearance="success">Yes</Lozenge>
+                  <span className="truncate text-subtle">
+                    {status.account.me.email ?? status.account.me.displayName ?? "your account"}
+                  </span>
+                </span>
+              ) : (
+                <span className="flex flex-wrap items-center gap-1.5">
+                  <Lozenge appearance="removed">No</Lozenge>
+                  <span className="text-subtle">{status.account.message}</span>
+                </span>
+              )}
+            </dd>
             <dt className="text-subtle">Last checked</dt>
             <dd>{status.checkedAt.toLocaleTimeString()}</dd>
           </dl>

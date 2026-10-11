@@ -71,8 +71,11 @@ export type DiscoverParams = {
   refresh?: boolean;
 };
 
-export function discoverJobs({ q = "", location = "", role, limit = 100, refresh = false }: DiscoverParams) {
+export function discoverJobs(
+  { q = "", location = "", role, limit = 100, refresh = false }: DiscoverParams,
+  token: string | null,
+) {
   const params = new URLSearchParams({ q, location, limit: String(limit), refresh: String(refresh) });
   if (role) params.set("role", role);
-  return apiFetch<DiscoverResponse>(`/api/v1/discover/jobs?${params}`);
+  return apiFetch<DiscoverResponse>(`/api/v1/discover/jobs?${params}`, { token });
 }

@@ -2,6 +2,7 @@
 
 import { useEffect, useRef, useState } from "react";
 import { MapPin, RefreshCw, Search, SearchX } from "lucide-react";
+import { useAuth } from "@clerk/nextjs";
 
 import { ApiError } from "@/lib/api/client";
 import {
@@ -23,15 +24,16 @@ const PAGE_SIZE = 100;
 
 type Result = { data: DiscoverResponse; error: null } | { data: null; error: string };
 
-async function load(params: DiscoverParams): Promise<Result> {
+async function load(params: DiscoverParams, getToken: () => Promise<string | null>): Promise<Result> {
   try {
-    return { data: await discoverJobs(params), error: null };
+    return { data: await discoverJobs(params, await getToken()), error: null };
   } catch (error) {
     return { data: null, error: error instanceof ApiError ? error.message : "Unexpected error." };
   }
 }
 
 export function JobSearch() {
+  const { getToken, isLoaded } = useAuth();
   const [query, setQuery] = useState("");
   const [location, setLocation] = useState("");
   const [role, setRole] = useState<TechRole | null>(null);
@@ -42,18 +44,20 @@ export function JobSearch() {
   const latestRequest = useRef(0);
 
   useEffect(() => {
-    load({ limit: PAGE_SIZE }).then((next) => {
+    // Wait for Clerk: before it loads there is no session token yet.
+    if (!isLoaded) return;
+    load({ limit: PAGE_SIZE }, getToken).then((next) => {
       if (latestRequest.current === 0) {
         setResult(next);
         setLoading(false);
       }
     });
-  }, []);
+  }, [getToken, isLoaded]);
 
   function run(params: DiscoverParams) {
     const requestId = ++latestRequest.current;
     setLoading(true);
-    load(params).then((next) => {
+    load(params, getToken).then((next) => {
       if (requestId !== latestRequest.current) return;
       setResult(next);
       setLoading(false);

@@ -1,6 +1,7 @@
 import Image from "next/image";
 import Link from "next/link";
 import { Search } from "lucide-react";
+import { UserButton } from "@clerk/nextjs";
 
 import logo from "@/app/icon.png";
 import { TextField } from "@/components/ui/text-field";
@@ -33,8 +34,12 @@ export function TopNav() {
         <CreateMenu />
       </div>
 
-      <div className="flex shrink-0 items-center gap-1 md:min-w-16 md:justify-end">
+      <div className="flex shrink-0 items-center gap-1.5 md:min-w-16 md:justify-end">
         <ThemeMenu />
+        {/* Clerk's account menu: profile, security, sign out */}
+        <div className="flex size-8 items-center justify-center pointer-coarse:size-10">
+          <UserButton />
+        </div>
       </div>
     </header>
   );
