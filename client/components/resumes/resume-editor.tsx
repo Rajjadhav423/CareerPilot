@@ -2,7 +2,7 @@
 
 import { useEffect, useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
-import { Braces, CloudUpload, Download, Eye, FileJson, History, LayoutList, MoreHorizontal, Pencil, Save, Sparkles, Upload } from "lucide-react";
+import { Braces, CloudUpload, Download, Eye, FileJson, FileText, History, LayoutList, MoreHorizontal, Pencil, Save, Sparkles, Upload } from "lucide-react";
 
 import { ApiError } from "@/lib/api/client";
 import type { PageSize, RenderInput, Resume, ResumeData } from "@/lib/api/resumes";
@@ -25,6 +25,7 @@ import { Spinner } from "@/components/ui/spinner";
 import { TextField } from "@/components/ui/text-field";
 import { ImportJsonDialog } from "./import-json-dialog";
 import { JsonEditorPanel } from "./json-editor-panel";
+import { MarkdownEditorPanel } from "./markdown-editor-panel";
 import { ResumeForm } from "./resume-form";
 import { ResumePreview } from "./resume-preview";
 import { SaveToDriveDialog } from "./save-to-drive-dialog";
@@ -74,7 +75,10 @@ function ResumeWorkspace({ resumeId, initial }: { resumeId: string | null; initi
   const [driveOpen, setDriveOpen] = useState(false);
   const [importMode, setImportMode] = useState<"import" | "ai" | null>(null);
   const [historyOpen, setHistoryOpen] = useState(false);
-  const [inputMode, setInputMode] = useState<"form" | "json">("form");
+  const [inputMode, setInputMode] = useState<"form" | "json" | "markdown">("form");
+  // Kept here so the text survives switching tabs. JSON text is null until edited: it then mirrors the resume.
+  const [markdownText, setMarkdownText] = useState("");
+  const [jsonText, setJsonText] = useState<string | null>(null);
   const versions = useResumeVersions(resumeId);
   const pending = versions.data?.filter((v) => v.status === "PROPOSED").length ?? 0;
 
@@ -116,6 +120,7 @@ function ResumeWorkspace({ resumeId, initial }: { resumeId: string | null; initi
     const next = toDraft(resume);
     setDraft(next);
     setSavedSnapshot(JSON.stringify(next));
+    setJsonText(null);
     save.reset();
   }
 
@@ -157,7 +162,7 @@ function ResumeWorkspace({ resumeId, initial }: { resumeId: string | null; initi
           </Field>
         </div>
 
-        <div className="flex flex-wrap items-center gap-2">
+        <div className="flex flex-wrap items-center gap-2 [&>button]:max-sm:flex-1 [&>button]:max-sm:justify-center">
           <Button variant="primary" isLoading={save.isPending} disabled={!hasName} onClick={saveResume}>
             <Save /> {resumeId ? "Save" : "Save resume"}
           </Button>
@@ -184,7 +189,7 @@ function ResumeWorkspace({ resumeId, initial }: { resumeId: string | null; initi
                 <Sparkles /> Improve with ChatGPT or Claude
               </DropdownMenuItem>
               <DropdownMenuItem onSelect={() => setImportMode("import")}>
-                <Upload /> Import JSON
+                <Upload /> Import resume (JSON / Markdown)
               </DropdownMenuItem>
               <DropdownMenuItem onSelect={exportJson}>
                 <FileJson /> Export JSON
@@ -228,16 +233,30 @@ function ResumeWorkspace({ resumeId, initial }: { resumeId: string | null; initi
             <Button size="compact" variant="subtle" isSelected={inputMode === "form"} onClick={() => setInputMode("form")}>
               <LayoutList /> Form
             </Button>
+            <Button size="compact" variant="subtle" isSelected={inputMode === "markdown"} onClick={() => setInputMode("markdown")}>
+              <FileText /> Markdown
+            </Button>
             <Button size="compact" variant="subtle" isSelected={inputMode === "json"} onClick={() => setInputMode("json")}>
               <Braces /> JSON
             </Button>
           </div>
-          {inputMode === "form" ? (
+          {inputMode === "form" && (
             <ResumeForm value={draft.resume} errors={fieldErrors}
               onChange={(resume) => setDraft({ ...draft, resume })} />
-          ) : (
-            <JsonEditorPanel value={data}
-              onCompile={(compiled) => setDraft((d) => ({ ...d, resume: toEditable(compiled) }))} />
+          )}
+          {inputMode === "markdown" && (
+            <MarkdownEditorPanel value={markdownText} onChange={setMarkdownText}
+              onApply={(compiled) => {
+                setDraft((d) => ({ ...d, resume: toEditable(compiled) }));
+                setJsonText(null);
+              }} />
+          )}
+          {inputMode === "json" && (
+            <JsonEditorPanel value={jsonText ?? JSON.stringify(data, null, 2)} onChange={setJsonText}
+              onCompile={(compiled) => {
+                setDraft((d) => ({ ...d, resume: toEditable(compiled) }));
+                setJsonText(null);
+              }} />
           )}
         </div>
         <div className={mode === "preview" ? "min-w-0" : "hidden min-w-0 @5xl:block"}>
@@ -251,7 +270,7 @@ function ResumeWorkspace({ resumeId, initial }: { resumeId: string | null; initi
         defaultFileName={fileName} />
       <ImportJsonDialog open={!!importMode} onOpenChange={(open) => !open && setImportMode(null)} mode={importMode ?? "import"}
         resumeId={resumeId} current={data}
-        onReplace={(imported) => setDraft({ ...draft, resume: toEditable(imported) })}
+        onReplace={(imported) => { setDraft({ ...draft, resume: toEditable(imported) }); setJsonText(null); }}
         onProposed={() => setHistoryOpen(true)} />
       {resumeId && (
         <VersionHistoryDialog open={historyOpen} onOpenChange={setHistoryOpen} resumeId={resumeId} dirty={dirty}

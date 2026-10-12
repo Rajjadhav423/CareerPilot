@@ -1,14 +1,17 @@
 package com.careerpilot.backend.document;
 
+import java.awt.image.BufferedImage;
 import java.io.ByteArrayInputStream;
 import java.io.ByteArrayOutputStream;
 import java.io.IOException;
 import java.io.InputStream;
 import java.io.OutputStream;
+import java.util.ArrayList;
 import java.util.HashSet;
 import java.util.List;
 import java.util.Set;
 import java.util.concurrent.ArrayBlockingQueue;
+import java.util.concurrent.Callable;
 import java.util.concurrent.ExecutionException;
 import java.util.concurrent.Future;
 import java.util.concurrent.RejectedExecutionException;
@@ -16,6 +19,8 @@ import java.util.concurrent.ThreadPoolExecutor;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.TimeoutException;
 import java.util.concurrent.atomic.AtomicInteger;
+
+import javax.imageio.ImageIO;
 
 import jakarta.annotation.PreDestroy;
 
@@ -26,6 +31,8 @@ import org.apache.fontbox.ttf.CmapLookup;
 import org.apache.pdfbox.Loader;
 import org.apache.pdfbox.io.RandomAccessReadBuffer;
 import org.apache.pdfbox.pdmodel.PDDocument;
+import org.apache.pdfbox.rendering.ImageType;
+import org.apache.pdfbox.rendering.PDFRenderer;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.core.io.ClassPathResource;
@@ -56,6 +63,9 @@ public class PdfDocumentConverter {
 
     /** Never fetched: relative references resolve here and are then refused by the access control. */
     private static final String BASE_URI = "https://documents.careerpilot.invalid/";
+
+    /** Sharp enough on phones and laptops; an A4 page is about 990 × 1400 pixels. */
+    private static final float PREVIEW_DPI = 120;
 
     private record BundledFont(String file, String family, int weight, FontStyle style) {
     }
@@ -95,9 +105,34 @@ public class PdfDocumentConverter {
      *                      timed out, 500 when rendering failed
      */
     public RenderedPdf convert(String xhtml) {
-        Future<RenderedPdf> job;
+        return onPool(() -> render(xhtml));
+    }
+
+    /**
+     * Draws each page of a PDF we generated as a PNG (same pool, timeout and page cap as {@link #convert}).
+     * Used for the preview, so it shows exactly what the PDF will look like, page breaks included.
+     */
+    public List<byte[]> pageImages(byte[] pdf) {
+        return onPool(() -> {
+            try (PDDocument document = Loader.loadPDF(pdf)) {
+                PDFRenderer renderer = new PDFRenderer(document);
+                List<byte[]> images = new ArrayList<>();
+                int pages = Math.min(document.getNumberOfPages(), limits.maxPages());
+                for (int i = 0; i < pages; i++) {
+                    BufferedImage image = renderer.renderImageWithDPI(i, PREVIEW_DPI, ImageType.RGB);
+                    ByteArrayOutputStream png = new ByteArrayOutputStream();
+                    ImageIO.write(image, "png", png);
+                    images.add(png.toByteArray());
+                }
+                return List.copyOf(images);
+            }
+        });
+    }
+
+    private <T> T onPool(Callable<T> task) {
+        Future<T> job;
         try {
-            job = pool.submit(() -> render(xhtml));
+            job = pool.submit(task);
         } catch (RejectedExecutionException e) {
             throw new ApiException(HttpStatus.SERVICE_UNAVAILABLE, "DOCUMENT_BUSY",
                     "Lots of documents are being created right now. Please try again in a moment.");

@@ -13,6 +13,7 @@ function DropdownMenuContent({
   className,
   sideOffset = 6,
   align = "end",
+  collisionPadding = 8,
   ...props
 }: React.ComponentProps<typeof DropdownMenuPrimitive.Content>) {
   return (
@@ -21,8 +22,10 @@ function DropdownMenuContent({
         data-slot="dropdown-menu-content"
         sideOffset={sideOffset}
         align={align}
+        collisionPadding={collisionPadding}
+        // Never taller or wider than the space left on screen (phones): long menus scroll inside
         className={cn(
-          "z-50 min-w-44 overflow-hidden rounded-sm bg-surface-overlay py-1.5 text-foreground shadow-overlay",
+          "z-50 max-h-(--radix-dropdown-menu-content-available-height) max-w-(--radix-dropdown-menu-content-available-width) min-w-44 overflow-x-hidden overflow-y-auto overscroll-contain rounded-sm bg-surface-overlay py-1.5 text-foreground shadow-overlay",
           className,
         )}
         {...props}

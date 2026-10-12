@@ -1,6 +1,7 @@
 "use client";
 
-import { useState } from "react";
+import { useRef, useState } from "react";
+import { Link2, Loader2, Sparkles } from "lucide-react";
 
 import { ApiError } from "@/lib/api/client";
 import type { WorkMode } from "@/lib/api/jobs";
@@ -43,15 +44,21 @@ function validate(form: FormState): Record<string, string> {
   return errors;
 }
 
+type ScrapeState = "idle" | "loading" | "done" | "error";
+
 type AddJobDialogProps = {
   open: boolean;
   onOpenChange: (open: boolean) => void;
 };
 
-/** Manually add a job to the board (it starts in "Saved"). */
+/** Manually add a job to the board (it starts in "Saved"). Paste a LinkedIn link to auto-fill. */
 export function AddJobDialog({ open, onOpenChange }: AddJobDialogProps) {
   const [form, setForm] = useState<FormState>(EMPTY);
   const [errors, setErrors] = useState<Record<string, string>>({});
+  const [scrapeState, setScrapeState] = useState<ScrapeState>("idle");
+  const [scrapeError, setScrapeError] = useState<string | null>(null);
+  const [linkedinUrl, setLinkedinUrl] = useState("");
+  const scrapeAbortRef = useRef<AbortController | null>(null);
   const createJob = useCreateJob();
 
   function update<K extends keyof FormState>(key: K, value: FormState[K]) {
@@ -70,7 +77,57 @@ export function AddJobDialog({ open, onOpenChange }: AddJobDialogProps) {
     if (!nextOpen) {
       setForm(EMPTY);
       setErrors({});
+      setScrapeState("idle");
+      setScrapeError(null);
+      setLinkedinUrl("");
       createJob.reset();
+    }
+  }
+
+  async function scrapeUrl() {
+    const url = linkedinUrl.trim();
+    if (!url || !/^https?:\/\//i.test(url)) {
+      setScrapeError("Enter a full URL starting with https://");
+      return;
+    }
+    setScrapeError(null);
+    setScrapeState("loading");
+
+    // Cancel any in-flight request
+    scrapeAbortRef.current?.abort();
+    const controller = new AbortController();
+    scrapeAbortRef.current = controller;
+
+    try {
+      const resp = await fetch("/api/scrape-job", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ url }),
+        signal: controller.signal,
+      });
+      const data = await resp.json() as {
+        title?: string; company?: string; location?: string;
+        workMode?: string; description?: string; jobUrl?: string; error?: string;
+      };
+      if (!resp.ok) {
+        setScrapeError(data.error ?? `Server responded with ${resp.status}.`);
+        setScrapeState("error");
+        return;
+      }
+      // Auto-fill the form — only overwrite blank fields so user data isn't lost
+      setForm((prev) => ({
+        title: prev.title || data.title || "",
+        company: prev.company || data.company || "",
+        location: prev.location || data.location || "",
+        workMode: (prev.workMode || (["ONSITE", "HYBRID", "REMOTE"].includes(data.workMode ?? "") ? data.workMode as WorkMode : "")) as "" | WorkMode,
+        jobUrl: prev.jobUrl || data.jobUrl || url,
+        description: prev.description || data.description || "",
+      }));
+      setScrapeState("done");
+    } catch (err) {
+      if (err instanceof DOMException && err.name === "AbortError") return;
+      setScrapeError("Network error — could not reach the server.");
+      setScrapeState("error");
     }
   }
 
@@ -115,6 +172,65 @@ export function AddJobDialog({ open, onOpenChange }: AddJobDialogProps) {
                 {serverError}
               </SectionMessage>
             )}
+
+            {/* ── LinkedIn / job-post URL auto-fill ───────────────────── */}
+            <div className="flex flex-col gap-2 rounded-md border border-border bg-surface-raised p-3">
+              <p className="flex items-center gap-1.5 text-sm font-semibold">
+                <Sparkles className="h-4 w-4 text-brand" />
+                Auto-fill from URL
+              </p>
+              <p className="text-xs text-subtlest">
+                Paste a LinkedIn job post or any job-listing URL — we'll fill in the details for you.
+              </p>
+              <div className="flex gap-2">
+                <div className="relative flex-1">
+                  <Link2 className="pointer-events-none absolute top-1/2 left-2.5 h-4 w-4 -translate-y-1/2 text-subtlest" />
+                  <input
+                    id="linkedin-url"
+                    type="url"
+                    inputMode="url"
+                    placeholder="https://linkedin.com/jobs/view/…"
+                    value={linkedinUrl}
+                    onChange={(e) => {
+                      setLinkedinUrl(e.target.value);
+                      setScrapeState("idle");
+                      setScrapeError(null);
+                    }}
+                    onKeyDown={(e) => {
+                      if (e.key === "Enter") {
+                        e.preventDefault();
+                        void scrapeUrl();
+                      }
+                    }}
+                    className="w-full rounded-sm border border-border-input bg-input py-1.5 pr-3 pl-8 text-sm text-foreground outline-none placeholder:text-subtlest hover:bg-input-hovered focus:border-focus focus:ring-1 focus:ring-focus aria-[invalid=true]:border-danger-bold"
+                    aria-label="Job posting URL to auto-fill from"
+                    aria-invalid={scrapeState === "error"}
+                    aria-describedby={scrapeState === "error" ? "scrape-error" : undefined}
+                  />
+                </div>
+                <Button
+                  type="button"
+                  variant="subtle"
+                  size="compact"
+                  isLoading={scrapeState === "loading"}
+                  disabled={!linkedinUrl.trim() || scrapeState === "loading"}
+                  onClick={() => void scrapeUrl()}
+                >
+                  {scrapeState === "loading" ? <Loader2 className="h-4 w-4 animate-spin" /> : null}
+                  {scrapeState === "done" ? "Re-fill" : "Auto-fill"}
+                </Button>
+              </div>
+              {scrapeState === "error" && scrapeError && (
+                <p id="scrape-error" className="text-xs text-danger-text" role="alert">
+                  {scrapeError}
+                </p>
+              )}
+              {scrapeState === "done" && (
+                <p className="text-xs text-success-text" role="status">
+                  ✓ Details filled in — review and edit as needed.
+                </p>
+              )}
+            </div>
 
             <Field htmlFor="job-title" label="Job title" required error={errors.title}>
               <TextField

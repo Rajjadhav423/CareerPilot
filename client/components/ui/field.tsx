@@ -14,7 +14,7 @@ type FieldProps = {
 /** Label + control + hint/error, Atlassian form layout. */
 function Field({ htmlFor, label, required, hint, error, className, children }: FieldProps) {
   return (
-    <div data-slot="field" className={cn("flex flex-col gap-1", className)}>
+    <div data-slot="field" className={cn("flex min-w-0 flex-col gap-1", className)}>
       <label htmlFor={htmlFor} className="text-xs font-semibold text-subtle">
         {label}
         {required && (

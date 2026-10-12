@@ -74,7 +74,8 @@ export function AppShell({ header, sidebar, children }: AppShellProps) {
           >
             {sidebar}
           </aside>
-          <main className="min-w-0 flex-1 px-4 pt-5 pb-8 md:px-8">{children}</main>
+          {/* overflow-x-clip: nothing inside can widen the page (which would let phones pan it sideways and move the top bar off-screen); unlike hidden, clip keeps sticky positioning working */}
+          <main className="min-w-0 flex-1 overflow-x-clip px-4 pt-5 pb-8 md:px-8">{children}</main>
         </div>
       </SidebarContext>
     </TooltipProvider>

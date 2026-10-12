@@ -11,7 +11,7 @@ function TextField({ className, elemBefore, ...props }: TextFieldProps) {
     <div
       data-slot="text-field"
       className={cn(
-        "flex h-8 pointer-coarse:h-10 items-center gap-2 rounded-sm border border-border-input bg-input px-2 text-sm transition-colors hover:bg-input-hovered focus-within:border-focus focus-within:ring-1 focus-within:ring-focus has-[[aria-invalid=true]]:border-danger-bold has-[:disabled]:pointer-events-none has-[:disabled]:border-transparent has-[:disabled]:bg-disabled-bg",
+        "flex h-8 min-w-0 pointer-coarse:h-10 items-center gap-2 rounded-sm border border-border-input bg-input px-2 text-sm transition-colors hover:bg-input-hovered focus-within:border-focus focus-within:ring-1 focus-within:ring-focus has-[[aria-invalid=true]]:border-danger-bold has-[:disabled]:pointer-events-none has-[:disabled]:border-transparent has-[:disabled]:bg-disabled-bg",
         className,
       )}
     >

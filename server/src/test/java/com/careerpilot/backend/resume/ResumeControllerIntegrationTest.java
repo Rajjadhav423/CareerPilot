@@ -265,6 +265,24 @@ public class ResumeControllerIntegrationTest {
     }
 
     @Test
+    void previewPagesArePngImagesOfThePdf() throws Exception {
+        String withMargins = DATA.replaceFirst("\\{", "{\"layout\": {\"marginTop\": 8, \"marginLeft\": 25},");
+        mockMvc.perform(post("/api/v1/resumes/render/pages").with(RAJ).contentType(MediaType.APPLICATION_JSON)
+                        .content("{\"templateId\": \"classic\", \"data\": " + withMargins + "}"))
+                .andExpect(status().isOk())
+                .andExpect(header().string("Cache-Control", "no-store"))
+                .andExpect(jsonPath("$.pageCount").value(1))
+                // base64 of the PNG signature
+                .andExpect(jsonPath("$.pages[0]").value(org.hamcrest.Matchers.startsWith("iVBORw0KGgo")));
+
+        String tooSmall = DATA.replaceFirst("\\{", "{\"layout\": {\"marginTop\": 1},");
+        mockMvc.perform(post("/api/v1/resumes/render/pages").with(RAJ).contentType(MediaType.APPLICATION_JSON)
+                        .content("{\"templateId\": \"classic\", \"data\": " + tooSmall + "}"))
+                .andExpect(status().isBadRequest())
+                .andExpect(jsonPath("$.errors['data.layout.marginTop']").exists());
+    }
+
+    @Test
     void hugeRequestsAreRefusedBeforeParsing() throws Exception {
         String huge = "{\"data\": {\"basics\": {\"fullName\": \"" + "x".repeat(600_000) + "\"}}}";
 

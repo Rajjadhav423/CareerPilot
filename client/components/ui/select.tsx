@@ -8,9 +8,9 @@ import { cn } from "@/lib/utils";
  */
 function Select({ className, children, ...props }: React.ComponentProps<"select">) {
   return (
-    <div data-slot="select" className={cn("relative", className)}>
+    <div data-slot="select" className={cn("relative min-w-0", className)}>
       <select
-        className="h-8 w-full appearance-none rounded-sm border border-border-input bg-input pr-8 pl-2 text-sm text-foreground transition-colors outline-none hover:bg-input-hovered focus:border-focus focus:ring-1 focus:ring-focus pointer-coarse:h-10 pointer-coarse:text-base"
+        className="h-8 w-full min-w-0 truncate appearance-none rounded-sm border border-border-input bg-input pr-8 pl-2 text-sm text-foreground transition-colors outline-none hover:bg-input-hovered focus:border-focus focus:ring-1 focus:ring-focus pointer-coarse:h-10 pointer-coarse:text-base"
         {...props}
       >
         {children}

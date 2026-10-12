@@ -5,7 +5,8 @@ import { useAuth } from "@clerk/nextjs";
 import { Check, Copy } from "lucide-react";
 
 import { ApiError } from "@/lib/api/client";
-import { getResumeSchema, normalizeResumeJson, type ResumeData } from "@/lib/api/resumes";
+import { getResumeSchema, type ResumeData } from "@/lib/api/resumes";
+import { compileResumeInput } from "@/lib/resumes/compile";
 import { describeField } from "@/lib/resumes/editor";
 import { useProposeResumeVersion } from "@/lib/resumes/use-resumes";
 import { Button } from "@/components/ui/button";
@@ -53,6 +54,7 @@ function ImportForm({ mode, resumeId, current, onReplace, onProposed, onDone }: 
   const { getToken } = useAuth();
   const propose = useProposeResumeVersion(resumeId ?? "none");
   const [text, setText] = useState("");
+  const [format, setFormat] = useState<"json" | "markdown">("json");
   const [error, setError] = useState<string | null>(null);
   const [fieldErrors, setFieldErrors] = useState<[string, string][]>([]);
   const [checking, setChecking] = useState<"replace" | "suggest" | null>(null);
@@ -64,16 +66,10 @@ function ImportForm({ mode, resumeId, current, onReplace, onProposed, onDone }: 
       setError("That's too much text for one resume.");
       return;
     }
-    let parsed: unknown;
-    try {
-      parsed = JSON.parse(extractJson(text));
-    } catch {
-      setError("That isn't valid JSON. Check for a missing comma or quote, or copy the whole reply again.");
-      return;
-    }
     setChecking(action);
     try {
-      const data = await normalizeResumeJson(parsed, await getToken());
+      // Any input is accepted for now: JSON in any shape, Markdown or plain text (see lib/resumes/convert.ts)
+      const { data } = await compileResumeInput(text, await getToken(), format === "markdown" ? "markdown" : "auto");
       if (action === "replace") {
         onReplace(data);
         onDone();
@@ -84,7 +80,7 @@ function ImportForm({ mode, resumeId, current, onReplace, onProposed, onDone }: 
       }
     } catch (e) {
       if (e instanceof ApiError && Object.keys(e.fieldErrors).length > 0) {
-        setError("The JSON has problems:");
+        setError("Some values couldn't be used:");
         setFieldErrors(Object.entries(e.fieldErrors));
       } else {
         setError(e instanceof ApiError ? e.message : "Unexpected error.");
@@ -97,16 +93,20 @@ function ImportForm({ mode, resumeId, current, onReplace, onProposed, onDone }: 
   return (
     <form onSubmit={(e) => { e.preventDefault(); submit(resumeId ? "suggest" : "replace"); }} noValidate className="flex min-h-0 flex-col">
       <DialogHeader>
-        <DialogTitle>{mode === "ai" ? "Improve with ChatGPT or Claude" : "Import resume JSON"}</DialogTitle>
+        <DialogTitle>{mode === "ai" ? "Improve with ChatGPT or Claude" : "Import resume"}</DialogTitle>
         <DialogDescription>
           {mode === "ai"
             ? "Copy the prompt into your AI assistant, add the job description, then paste its reply here."
-            : "Paste JSON in CareerPilot's format. Use Export JSON to see an example."}
+            : "Paste resume JSON or Markdown. Headings and bullet lists are converted into the resume layout."}
         </DialogDescription>
       </DialogHeader>
       <DialogBody className="flex flex-col gap-4 py-4">
         {mode === "ai" && <PromptStep current={current} />}
-        <Field htmlFor="resume-json" label={mode === "ai" ? "2. Paste the AI's reply" : "JSON"}
+        {mode === "import" && <div className="flex gap-2" role="group" aria-label="Import format">
+          <Button type="button" size="compact" variant="subtle" isSelected={format === "json"} onClick={() => setFormat("json")}>JSON</Button>
+          <Button type="button" size="compact" variant="subtle" isSelected={format === "markdown"} onClick={() => setFormat("markdown")}>Markdown</Button>
+        </div>}
+        <Field htmlFor="resume-json" label={mode === "ai" ? "2. Paste the AI's reply" : format === "json" ? "JSON" : "Markdown"}
           hint={resumeId ? "Nothing changes until you review and accept the suggestion." : undefined}>
           <Textarea
             id="resume-json"
@@ -116,7 +116,7 @@ function ImportForm({ mode, resumeId, current, onReplace, onProposed, onDone }: 
             value={text}
             onChange={(e) => { setText(e.target.value); setError(null); setFieldErrors([]); }}
             aria-invalid={!!error}
-            placeholder={'{\n  "schemaVersion": 2,\n  "basics": { "fullName": "Your Name" },\n  "sections": []\n}'}
+            placeholder={format === "json" ? '{\n  "schemaVersion": 2,\n  "basics": { "fullName": "Your Name" },\n  "sections": []\n}' : "# Alex Morgan\nSoftware Engineer · alex@example.com · San Francisco, CA\n\n## Summary\nProduct-minded engineer...\n\n## Experience\n### Senior Engineer — Acme\n2022–Present\n- Built...\n\n## Skills\n- TypeScript\n- React"}
           />
         </Field>
         {error && (
@@ -205,12 +205,4 @@ function buildPrompt(schema: string, current: ResumeData) {
     "Job description:",
     "",
   ].join("\n");
-}
-
-/** AI replies often wrap the JSON in ``` fences or add a sentence; keep the outermost object. */
-function extractJson(text: string) {
-  const trimmed = text.trim();
-  const start = trimmed.indexOf("{");
-  const end = trimmed.lastIndexOf("}");
-  return start >= 0 && end > start ? trimmed.slice(start, end + 1) : trimmed;
 }

@@ -8,6 +8,17 @@
   "additionalProperties": false,
   "properties": {
     "schemaVersion": { "const": 2 },
+    "layout": {
+      "type": ["object", "null"],
+      "description": "Optional page margins in millimetres. Leave out to use the template's defaults (15 top, 16 elsewhere).",
+      "additionalProperties": false,
+      "properties": {
+        "marginTop": { "type": ["number", "null"], "minimum": 5, "maximum": 40 },
+        "marginRight": { "type": ["number", "null"], "minimum": 5, "maximum": 40 },
+        "marginBottom": { "type": ["number", "null"], "minimum": 5, "maximum": 40 },
+        "marginLeft": { "type": ["number", "null"], "minimum": 5, "maximum": 40 }
+      }
+    },
     "basics": {
       "type": "object",
       "required": ["fullName"],

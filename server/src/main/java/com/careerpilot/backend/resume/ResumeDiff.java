@@ -28,6 +28,20 @@ final class ResumeDiff {
     private ResumeDiff() {
     }
 
+    /** "15 / 16 / 16 / 16 mm" (top / right / bottom / left), or null for the template default. */
+    private static String margins(ResumeData data) {
+        ResumeData.Layout l = data.layout();
+        if (l == null) {
+            return null;
+        }
+        return String.format(java.util.Locale.ROOT, "%s / %s / %s / %s mm", mm(l.top()), mm(l.right()), mm(l.bottom()),
+                mm(l.left()));
+    }
+
+    private static String mm(double value) {
+        return value == Math.rint(value) ? String.valueOf((long) value) : String.valueOf(value);
+    }
+
     static List<Change> between(ResumeData beforeRaw, ResumeData afterRaw) {
         ResumeData before = beforeRaw.normalized();
         ResumeData after = afterRaw.normalized();
@@ -39,6 +53,7 @@ final class ResumeDiff {
         field(changes, "Basics", "phone", before.basics().phone(), after.basics().phone());
         field(changes, "Basics", "location", before.basics().location(), after.basics().location());
         field(changes, "Basics", "links", links(before), links(after));
+        field(changes, "Page", "margins", margins(before), margins(after));
 
         Map<String, Section> old = byId(before.sections());
         Map<String, Section> current = byId(after.sections());

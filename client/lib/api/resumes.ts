@@ -37,6 +37,14 @@ export type ResumeSection = {
   groups?: ResumeSkillGroup[];
 };
 
+/** Page margins in millimetres (5–40). Missing values use the template default: 15 top, 16 elsewhere. */
+export type ResumeLayout = {
+  marginTop?: number | null;
+  marginRight?: number | null;
+  marginBottom?: number | null;
+  marginLeft?: number | null;
+};
+
 /** Mirrors ResumeData.java (schema version 2). JSON Schema: GET /api/v1/resumes/schema */
 export type ResumeData = {
   schemaVersion?: 2;
@@ -49,6 +57,7 @@ export type ResumeData = {
     links?: { label?: string | null; url: string }[];
   };
   sections?: ResumeSection[];
+  layout?: ResumeLayout | null;
 };
 
 export type ResumeTemplate = { id: string; name: string; description: string };
@@ -191,6 +200,16 @@ export async function renderResumePreview(input: RenderInput, token: string | nu
     signal,
   });
   return response.text();
+}
+
+/** The PDF's pages as base64 PNG images: a preview that matches the PDF exactly. */
+export function renderResumePages(input: RenderInput, token: string | null, signal?: AbortSignal) {
+  return apiFetch<{ pageCount: number; pages: string[] }>(`${BASE}/render/pages`, {
+    method: "POST",
+    json: input,
+    token,
+    signal,
+  });
 }
 
 export function renderResumePdf(input: RenderInput, token: string | null) {

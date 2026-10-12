@@ -1,6 +1,7 @@
 import type {
   ResumeData,
   ResumeEntry,
+  ResumeLayout,
   ResumeListItem,
   ResumeSection,
   ResumeSkillGroup,
@@ -31,6 +32,8 @@ export type EditableResume = {
     links: { label: string; url: string }[];
   };
   sections: EditableSection[];
+  /** Page margins in mm; null = template default. */
+  layout: ResumeLayout | null;
 };
 
 /** Short random id (letters/digits), valid for the API's id pattern. */
@@ -92,6 +95,7 @@ export function emptyResume(): EditableResume {
       newSection("entries", "Education"),
       newSection("skills", "Skills"),
     ],
+    layout: null,
   };
 }
 
@@ -125,6 +129,7 @@ export function toEditable(data: ResumeData): EditableResume {
         id: g.id ?? newId("g"), name: text(g.name), keywords: g.keywords ?? [], visible: visible(g.visible),
       })),
     })),
+    layout: data.layout ?? null,
   };
 }
 
@@ -175,7 +180,21 @@ export function toApi(resume: EditableResume): ResumeData {
           };
       }
     }),
+    layout: cleanLayout(resume.layout),
   };
+}
+
+const MARGIN_KEYS = ["marginTop", "marginRight", "marginBottom", "marginLeft"] as const;
+
+/** Keeps only finite margins (the server checks the 5–40 mm range); null when none are set. */
+function cleanLayout(layout: ResumeLayout | null): ResumeLayout | null {
+  if (!layout) return null;
+  const clean: ResumeLayout = {};
+  for (const key of MARGIN_KEYS) {
+    const value = layout[key];
+    if (typeof value === "number" && Number.isFinite(value)) clean[key] = value;
+  }
+  return Object.keys(clean).length ? clean : null;
 }
 
 /** "data.sections[1].entries[0].title" → "Experience › Entry 1 › title" for error lists. */

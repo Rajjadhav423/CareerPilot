@@ -46,9 +46,17 @@ public class HtmlDocumentRenderer {
      * @param model values for the template; the renderer adds {@code css} and {@code pageSize}
      */
     public String render(DocumentTemplate template, Map<String, Object> model, PageSize pageSize) {
+        return render(template, model, pageSize, "");
+    }
+
+    /**
+     * @param overrides extra CSS appended after the template's stylesheet. Must be built by our code from
+     *                  validated values (numbers), never from user text.
+     */
+    public String render(DocumentTemplate template, Map<String, Object> model, PageSize pageSize, String overrides) {
         Map<String, Object> variables = new HashMap<>(model);
         variables.put("css", stylesheet(BASE_STYLESHEET).replace("__PAGE_SIZE__", pageSize.css())
-                + "\n" + stylesheet(template.stylesheet()));
+                + "\n" + stylesheet(template.stylesheet()) + (overrides.isEmpty() ? "" : "\n" + overrides));
         variables.put("pageSize", pageSize.css());
         return engine.process(template.view(), new Context(Locale.ENGLISH, variables));
     }

@@ -195,6 +195,43 @@ class ResumeDocumentServiceTest {
     }
 
     @Test
+    void pageMarginsComeFromTheLayout() throws IOException {
+        ResumeData base = sample();
+        ResumeData wide = new ResumeData(2, base.basics(), base.sections(), new ResumeData.Layout(8.0, null, null, 35.0));
+
+        assertThat(service.renderHtml("classic", PageSize.A4, wide)).contains("@page { margin: 8.0mm 16.0mm 16.0mm 35.0mm; }");
+        assertThat(service.renderHtml("classic", PageSize.A4, base)).doesNotContain("8.0mm");
+        // 35 mm ≈ 99 pt from the left edge instead of 16 mm ≈ 45 pt
+        assertThat(leftmostText(service.renderPdf("classic", PageSize.A4, wide).bytes())).isGreaterThan(95f);
+        assertThat(leftmostText(service.renderPdf("classic", PageSize.A4, base).bytes())).isLessThan(60f);
+    }
+
+    @Test
+    void previewPagesAreImagesOfEachPdfPage() throws IOException {
+        List<byte[]> pages = service.renderPageImages("modern", PageSize.A4, sample());
+
+        assertThat(pages).hasSize(1);
+        var image = javax.imageio.ImageIO.read(new java.io.ByteArrayInputStream(pages.get(0)));
+        // A4 at 120 dpi
+        assertThat(image.getWidth()).isBetween(985, 995);
+        assertThat(image.getHeight()).isBetween(1398, 1408);
+    }
+
+    private static float leftmostText(byte[] pdf) throws IOException {
+        float[] min = {Float.MAX_VALUE};
+        try (PDDocument document = Loader.loadPDF(pdf)) {
+            PDFTextStripper stripper = new PDFTextStripper() {
+                @Override
+                protected void writeString(String text, List<org.apache.pdfbox.text.TextPosition> positions) {
+                    positions.forEach(p -> min[0] = Math.min(min[0], p.getXDirAdj()));
+                }
+            };
+            stripper.getText(document);
+        }
+        return min[0];
+    }
+
+    @Test
     void documentsOverThePageLimitAreRefused() {
         ResumeDocumentService strict = new ResumeDocumentService(new ResumeTemplates(), new HtmlDocumentRenderer(), converter(1));
         List<Entry> jobs = new ArrayList<>();

@@ -4,6 +4,7 @@ import java.net.URI;
 import java.nio.charset.StandardCharsets;
 import java.io.IOException;
 import java.io.InputStream;
+import java.util.Base64;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
@@ -205,6 +206,20 @@ public class ResumeController {
                 .header("Content-Security-Policy", PREVIEW_CSP)
                 .header(HttpHeaders.CACHE_CONTROL, "no-store")
                 .body(html);
+    }
+
+    /** The PDF's pages as PNG images (base64), so the preview matches the PDF exactly, page by page. */
+    @PostMapping("/render/pages")
+    public ResponseEntity<PagesResponse> pages(@AuthenticationPrincipal Jwt jwt, @Valid @RequestBody RenderRequest request) {
+        userId(jwt);
+        List<String> pages = documents.renderPageImages(request.templateId(), request.pageSize(), request.data()).stream()
+                .map(png -> Base64.getEncoder().encodeToString(png))
+                .toList();
+        return ResponseEntity.ok().header(HttpHeaders.CACHE_CONTROL, "no-store").body(new PagesResponse(pages.size(), pages));
+    }
+
+    /** @param pages base64-encoded PNG images, one per page */
+    public record PagesResponse(int pageCount, List<String> pages) {
     }
 
     /** The PDF as a download. */

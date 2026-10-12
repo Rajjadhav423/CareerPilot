@@ -3,7 +3,7 @@
 import { useState } from "react";
 import { ArrowDown, ArrowUp, ChevronDown, ChevronRight, Eye, EyeOff, Plus, Trash2 } from "lucide-react";
 
-import { RESUME_LIMITS, type SectionType } from "@/lib/api/resumes";
+import { RESUME_LIMITS, type ResumeLayout, type SectionType } from "@/lib/api/resumes";
 import {
   emptyEntry,
   emptyGroup,
@@ -118,7 +118,52 @@ export function ResumeForm({ value, onChange, errors }: ResumeFormProps) {
         disabled={value.sections.length >= RESUME_LIMITS.sections}
         onAdd={(type, title) => setSections([...value.sections, newSection(type, title)])}
       />
+
+      <MarginsCard layout={value.layout} errors={errors} onChange={(layout) => onChange({ ...value, layout })} />
     </div>
+  );
+}
+
+const MARGINS = [
+  { key: "marginTop", label: "Top", fallback: 15 },
+  { key: "marginRight", label: "Right", fallback: 16 },
+  { key: "marginBottom", label: "Bottom", fallback: 16 },
+  { key: "marginLeft", label: "Left", fallback: 16 },
+] as const;
+
+/** Page margins in mm. Empty = the template default (shown as the placeholder). */
+function MarginsCard({ layout, errors, onChange }: {
+  layout: ResumeLayout | null; errors: Record<string, string>; onChange: (layout: ResumeLayout | null) => void;
+}) {
+  function set(key: (typeof MARGINS)[number]["key"], text: string) {
+    const next: ResumeLayout = { ...layout };
+    const value = text.trim() === "" ? null : Number(text);
+    if (value === null || !Number.isFinite(value)) delete next[key];
+    else next[key] = value;
+    onChange(Object.keys(next).length ? next : null);
+  }
+
+  return (
+    <Card className="gap-3 p-4">
+      <div className="flex flex-wrap items-center justify-between gap-2">
+        <div className="min-w-0">
+          <h2 className="text-base font-semibold">Page margins</h2>
+          <p className="text-xs text-subtlest">Millimetres, 5–40. Leave empty for the template default.</p>
+        </div>
+        {layout && (
+          <Button size="compact" variant="subtle" onClick={() => onChange(null)}>Reset</Button>
+        )}
+      </div>
+      <div className="grid grid-cols-2 gap-3 @lg:grid-cols-4">
+        {MARGINS.map((m) => (
+          <Field key={m.key} htmlFor={`margin-${m.key}`} label={`${m.label} (mm)`} error={errors[`data.layout.${m.key}`]}>
+            <TextField id={`margin-${m.key}`} type="number" inputMode="decimal" min={5} max={40} step={1}
+              placeholder={String(m.fallback)} value={layout?.[m.key] ?? ""}
+              onChange={(e) => set(m.key, e.target.value)} aria-invalid={!!errors[`data.layout.${m.key}`]} />
+          </Field>
+        ))}
+      </div>
+    </Card>
   );
 }
 

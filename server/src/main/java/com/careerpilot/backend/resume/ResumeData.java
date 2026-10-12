@@ -8,6 +8,8 @@ import java.util.Set;
 import java.util.regex.Pattern;
 
 import jakarta.validation.Valid;
+import jakarta.validation.constraints.DecimalMax;
+import jakarta.validation.constraints.DecimalMin;
 import jakarta.validation.constraints.Email;
 import jakarta.validation.constraints.NotBlank;
 import jakarta.validation.constraints.NotNull;
@@ -26,14 +28,54 @@ import com.careerpilot.backend.document.WebLink;
  *   <li>Descriptions, bullets, list items and text allow **bold**, *italic* and [label](https://…) only
  *       (see {@link RichText}). Everything else is plain text, escaped when printed.</li>
  *   <li>Every string and list is capped so a single request can't produce an unbounded document.</li>
+ *   <li>{@code layout} (optional) sets the page margins in millimetres.</li>
  * </ul>
  */
 public record ResumeData(
         Integer schemaVersion,
         @NotNull(message = "is required") @Valid Basics basics,
-        @Size(max = 25) List<@NotNull @Valid Section> sections) {
+        @Size(max = 25) List<@NotNull @Valid Section> sections,
+        @Valid Layout layout) {
 
     public static final int SCHEMA_VERSION = 2;
+
+    public ResumeData(Integer schemaVersion, Basics basics, List<Section> sections) {
+        this(schemaVersion, basics, sections, null);
+    }
+
+    /**
+     * Page margins in millimetres (5–40); a missing value uses the template default (15 top, 16 elsewhere).
+     * Only numbers, so the values can be written into the page CSS safely.
+     */
+    public record Layout(
+            @DecimalMin("5") @DecimalMax("40") Double marginTop,
+            @DecimalMin("5") @DecimalMax("40") Double marginRight,
+            @DecimalMin("5") @DecimalMax("40") Double marginBottom,
+            @DecimalMin("5") @DecimalMax("40") Double marginLeft) {
+
+        static final double DEFAULT_TOP = 15;
+        static final double DEFAULT_SIDE = 16;
+
+        double top() {
+            return marginTop == null ? DEFAULT_TOP : marginTop;
+        }
+
+        double right() {
+            return marginRight == null ? DEFAULT_SIDE : marginRight;
+        }
+
+        double bottom() {
+            return marginBottom == null ? DEFAULT_SIDE : marginBottom;
+        }
+
+        double left() {
+            return marginLeft == null ? DEFAULT_SIDE : marginLeft;
+        }
+
+        boolean isEmpty() {
+            return marginTop == null && marginRight == null && marginBottom == null && marginLeft == null;
+        }
+    }
     static final String ID_PATTERN = "[A-Za-z0-9_-]{1,40}";
     private static final Pattern ID = Pattern.compile(ID_PATTERN);
 
@@ -174,7 +216,8 @@ public record ResumeData(
             cleanSections.add(new Section(sectionId, s.type(), title == null ? "Section" : title, visible(s.visible()),
                     entries, content, items, groups));
         }
-        return new ResumeData(SCHEMA_VERSION, cleanBasics, List.copyOf(cleanSections));
+        return new ResumeData(SCHEMA_VERSION, cleanBasics, List.copyOf(cleanSections),
+                layout == null || layout.isEmpty() ? null : layout);
     }
 
     private static boolean visible(Boolean value) {

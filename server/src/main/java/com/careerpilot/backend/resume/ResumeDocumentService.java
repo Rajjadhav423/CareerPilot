@@ -1,5 +1,7 @@
 package com.careerpilot.backend.resume;
 
+import java.util.List;
+import java.util.Locale;
 import java.util.Map;
 
 import org.springframework.http.HttpStatus;
@@ -35,11 +37,32 @@ public class ResumeDocumentService {
         Map<String, Object> model = Map.of(
                 "resume", resume,
                 "title", resume.name() + " — Resume");
-        return html.render(template, model, pageSize == null ? PageSize.A4 : pageSize);
+        return html.render(template, model, pageSize == null ? PageSize.A4 : pageSize, layoutCss(data.layout()));
     }
 
     public RenderedPdf renderPdf(String templateId, PageSize pageSize, ResumeData data) {
         return pdf.convert(renderHtml(templateId, pageSize, data));
+    }
+
+    /** The PDF's pages as PNG images, for a preview that matches the PDF exactly (page breaks included). */
+    public List<byte[]> renderPageImages(String templateId, PageSize pageSize, ResumeData data) {
+        return pdf.pageImages(renderPdf(templateId, pageSize, data).bytes());
+    }
+
+    /** Page margins as CSS. Built only from validated numbers (ResumeData.Layout, 5–40 mm). */
+    static String layoutCss(ResumeData.Layout layout) {
+        if (layout == null || layout.isEmpty()) {
+            return "";
+        }
+        String margins = String.format(Locale.ROOT, "%.1fmm %.1fmm %.1fmm %.1fmm",
+                clamp(layout.top()), clamp(layout.right()), clamp(layout.bottom()), clamp(layout.left()));
+        return "@page { margin: " + margins + "; }\n"
+                + "@media screen { body { padding: " + margins + "; } }\n"
+                + "@media screen and (max-width: 860px) { body, html.page-letter body { padding: 16px; } }";
+    }
+
+    private static double clamp(double mm) {
+        return Double.isFinite(mm) ? Math.max(5, Math.min(40, mm)) : 16;
     }
 
     public DocumentTemplate template(String templateId) {
