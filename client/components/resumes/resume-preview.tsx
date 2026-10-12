@@ -4,22 +4,26 @@ import { useEffect, useState } from "react";
 import { useAuth } from "@clerk/nextjs";
 
 import { ApiError } from "@/lib/api/client";
+import { renderDocumentPages, type DocIssue } from "@/lib/api/docs";
 import { renderResumePages, type RenderInput } from "@/lib/api/resumes";
 import { SectionMessage } from "@/components/ui/section-message";
 import { Spinner } from "@/components/ui/spinner";
 
 type ResumePreviewProps = {
+  /** With `document` set, the document is rendered; otherwise the form data with its template. */
   input: RenderInput;
-  /** False while required fields are missing: nothing is sent to the server. */
+  /** False while required fields are missing (or the document JSON doesn't parse): nothing is sent. */
   ready: boolean;
   onFieldErrors: (errors: Record<string, string>) => void;
+  /** Broken document rules (400 DOCUMENT_INVALID), empty when the document rendered. */
+  onDocumentIssues?: (issues: DocIssue[]) => void;
 };
 
 /**
  * Live preview: the server creates the PDF and sends each page as an image, so what you see is exactly what
  * downloads — same fonts, margins and page breaks. Images scale to any screen width, phones included.
  */
-export function ResumePreview({ input, ready, onFieldErrors }: ResumePreviewProps) {
+export function ResumePreview({ input, ready, onFieldErrors, onDocumentIssues }: ResumePreviewProps) {
   const { getToken } = useAuth();
   const [pages, setPages] = useState<string[] | null>(null);
   const [error, setError] = useState<string | null>(null);
@@ -33,22 +37,28 @@ export function ResumePreview({ input, ready, onFieldErrors }: ResumePreviewProp
     const timer = setTimeout(async () => {
       setLoading(true);
       try {
-        const result = await renderResumePages(JSON.parse(key) as RenderInput, await getToken(), controller.signal);
+        const request = JSON.parse(key) as RenderInput;
+        const token = await getToken();
+        const result = request.document
+          ? await renderDocumentPages(request.document, token, controller.signal)
+          : await renderResumePages(request, token, controller.signal);
         setPages(result.pages);
         setError(null);
         onFieldErrors({});
+        onDocumentIssues?.([]);
       } catch (caught) {
         if (controller.signal.aborted) return;
         if (caught instanceof ApiError) {
-          setError(caught.message);
+          setError(caught.issues.length > 0 ? `${caught.message} See the list under the document.` : caught.message);
           onFieldErrors(caught.fieldErrors);
+          onDocumentIssues?.(caught.issues);
         } else {
           setError("The preview couldn't be updated.");
         }
       } finally {
         if (!controller.signal.aborted) setLoading(false);
       }
-    }, 700);
+    }, 400);
     return () => {
       clearTimeout(timer);
       controller.abort();

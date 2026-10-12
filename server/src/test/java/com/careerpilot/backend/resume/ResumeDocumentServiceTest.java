@@ -23,10 +23,11 @@ import org.junit.jupiter.api.Test;
 import org.springframework.util.unit.DataSize;
 
 import com.careerpilot.backend.common.ApiException;
-import com.careerpilot.backend.document.DocumentProperties;
-import com.careerpilot.backend.document.HtmlDocumentRenderer;
-import com.careerpilot.backend.document.PageSize;
-import com.careerpilot.backend.document.PdfDocumentConverter;
+import com.careerpilot.backend.docengine.DocumentProperties;
+import com.careerpilot.backend.docengine.DocEngine;
+import com.careerpilot.backend.docengine.DocPresets;
+import com.careerpilot.backend.docengine.PageSize;
+import com.careerpilot.backend.docengine.PdfDocumentConverter;
 import com.careerpilot.backend.resume.ResumeData.Basics;
 import com.careerpilot.backend.resume.ResumeData.Entry;
 import com.careerpilot.backend.resume.ResumeData.Link;
@@ -40,7 +41,7 @@ class ResumeDocumentServiceTest {
 
     private final PdfDocumentConverter converter = converter(10);
     private final ResumeDocumentService service =
-            new ResumeDocumentService(new ResumeTemplates(), new HtmlDocumentRenderer(), converter);
+            service(converter);
 
     @Test
     void createsAPdfWithRealSelectableTextForEveryTemplate() throws IOException {
@@ -109,7 +110,7 @@ class ResumeDocumentServiceTest {
         String html = service.renderHtml("classic", PageSize.A4, data);
         assertThat(html).doesNotContain("<script>", "<img", "<b>", "javascript:")
                 .contains("&lt;script&gt;", "&lt;b&gt;Engineer&lt;/b&gt;", "Pune &amp; Mumbai",
-                        "<strong>reliable systems</strong>", "<em>clean code</em>", "<a href=\"https://raj.dev\">my blog</a>",
+                        "<strong>reliable systems</strong>", "<em>clean code</em>", "<a href=\"https://raj.dev\" title=\"my blog\">my blog</a>",
                         "&lt;img src=x onerror=alert(1)&gt;", "bad");
 
         try (PDDocument document = Loader.loadPDF(service.renderPdf("classic", PageSize.A4, data).bytes())) {
@@ -199,7 +200,7 @@ class ResumeDocumentServiceTest {
         ResumeData base = sample();
         ResumeData wide = new ResumeData(2, base.basics(), base.sections(), new ResumeData.Layout(8.0, null, null, 35.0));
 
-        assertThat(service.renderHtml("classic", PageSize.A4, wide)).contains("@page { margin: 8.0mm 16.0mm 16.0mm 35.0mm; }");
+        assertThat(service.renderHtml("classic", PageSize.A4, wide)).contains("margin: 8mm 16mm 16mm 35mm;");
         assertThat(service.renderHtml("classic", PageSize.A4, base)).doesNotContain("8.0mm");
         // 35 mm ≈ 99 pt from the left edge instead of 16 mm ≈ 45 pt
         assertThat(leftmostText(service.renderPdf("classic", PageSize.A4, wide).bytes())).isGreaterThan(95f);
@@ -233,7 +234,7 @@ class ResumeDocumentServiceTest {
 
     @Test
     void documentsOverThePageLimitAreRefused() {
-        ResumeDocumentService strict = new ResumeDocumentService(new ResumeTemplates(), new HtmlDocumentRenderer(), converter(1));
+        ResumeDocumentService strict = service(converter(1));
         List<Entry> jobs = new ArrayList<>();
         for (int i = 0; i < 20; i++) {
             jobs.add(new Entry(null, "Engineer " + i, "Company", null, null, null, false, null, null,
@@ -317,6 +318,11 @@ class ResumeDocumentServiceTest {
 
     static Section skills(String id, String title, SkillGroup... groups) {
         return new Section(id, SectionType.skills, title, null, null, null, null, List.of(groups));
+    }
+
+    static ResumeDocumentService service(PdfDocumentConverter converter) {
+        DocPresets presets = new DocPresets(tools.jackson.databind.json.JsonMapper.builder().build());
+        return new ResumeDocumentService(new DocEngine(presets, converter), presets);
     }
 
     private static PdfDocumentConverter converter(int maxPages) {

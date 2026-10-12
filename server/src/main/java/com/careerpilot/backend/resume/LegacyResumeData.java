@@ -11,7 +11,7 @@ import jakarta.validation.constraints.NotBlank;
 import jakarta.validation.constraints.NotNull;
 import jakarta.validation.constraints.Size;
 
-import com.careerpilot.backend.document.WebLink;
+import com.careerpilot.backend.docengine.WebLink;
 
 /**
  * The first resume format (fixed sections), kept only to read resumes saved before schema version 2 and

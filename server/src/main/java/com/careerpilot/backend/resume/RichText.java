@@ -3,7 +3,7 @@ package com.careerpilot.backend.resume;
 import java.util.ArrayList;
 import java.util.List;
 
-import com.careerpilot.backend.document.SafeUrls;
+import com.careerpilot.backend.docengine.SafeUrls;
 
 /**
  * The tiny formatting language allowed inside resume text: {@code **bold**}, {@code *italic*} (or

@@ -37,7 +37,7 @@ import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RestController;
 
 import com.careerpilot.backend.common.ApiException;
-import com.careerpilot.backend.document.PageSize;
+import com.careerpilot.backend.docengine.PageSize;
 import com.careerpilot.backend.drive.DriveDocumentService;
 import com.careerpilot.backend.drive.DriveDtos.DriveDocumentResponse;
 import com.careerpilot.backend.resume.ResumeDtos.DiffResponse;
@@ -71,6 +71,7 @@ public class ResumeController {
             @Size(max = 40) String templateId,
             PageSize pageSize,
             @NotNull(message = "is required") @Valid ResumeData data,
+            JsonNode document,
             @Size(max = 150) String fileName,
             @Pattern(regexp = "[A-Za-z0-9_-]{1,128}", message = "is not a folder id") String folderId,
             UUID resumeId) {
@@ -78,28 +79,26 @@ public class ResumeController {
 
     private final ResumeService resumes;
     private final ResumeDocumentService documents;
-    private final ResumeTemplates templates;
     private final DriveDocumentService drive;
     private final CurrentUserService currentUsers;
     private final ResumeJson json;
     private final Validator validator;
     private final byte[] schema;
 
-    public ResumeController(ResumeService resumes, ResumeDocumentService documents, ResumeTemplates templates,
+    public ResumeController(ResumeService resumes, ResumeDocumentService documents,
             DriveDocumentService drive, CurrentUserService currentUsers, ResumeJson json, Validator validator) {
         this.json = json;
         this.validator = validator;
         this.schema = readSchema();
         this.resumes = resumes;
         this.documents = documents;
-        this.templates = templates;
         this.drive = drive;
         this.currentUsers = currentUsers;
     }
 
     @GetMapping("/templates")
     public List<TemplateResponse> templates() {
-        return templates.all().stream().map(t -> new TemplateResponse(t.id(), t.name(), t.description())).toList();
+        return documents.templates().stream().map(t -> new TemplateResponse(t.id(), t.name(), t.description())).toList();
     }
 
     /** JSON Schema of the resume format, for people and AI assistants writing resume JSON. */
@@ -238,6 +237,13 @@ public class ResumeController {
     }
 
     /** Generates the PDF and saves it to the user's Google Drive. Retrying with the same requestId is safe. */
+    /** The form data as a docEngine document (schema version 3), to continue editing as a document. */
+    @PostMapping("/document")
+    public JsonNode toDocument(@AuthenticationPrincipal Jwt jwt, @Valid @RequestBody RenderRequest request) {
+        userId(jwt);
+        return documents.toDocument(request.templateId(), request.pageSize(), request.data());
+    }
+
     @PostMapping("/render/drive")
     public ResponseEntity<DriveDocumentResponse> saveToDrive(@AuthenticationPrincipal Jwt jwt,
             @Valid @RequestBody SaveToDriveRequest request) {
@@ -245,7 +251,10 @@ public class ResumeController {
         if (request.resumeId() != null && !resumes.isOwnedBy(user.getId(), request.resumeId())) {
             throw new ApiException(HttpStatus.NOT_FOUND, "RESUME_NOT_FOUND", "Resume not found.");
         }
-        var pdf = documents.renderPdf(request.templateId(), request.pageSize(), request.data());
+        // A docEngine document, when sent, is what gets printed; otherwise the form data
+        var pdf = request.document() != null && !request.document().isNull()
+                ? documents.renderDocumentPdf(request.document())
+                : documents.renderPdf(request.templateId(), request.pageSize(), request.data());
         String fileName = ResumeDocumentService.fileName(request.fileName(), request.data());
         DriveDocumentResponse saved = drive.uploadPdf(user, request.requestId(), fileName, request.folderId(),
                 request.resumeId(), pdf.bytes());
@@ -253,7 +262,7 @@ public class ResumeController {
     }
 
     private static byte[] readSchema() {
-        try (InputStream in = new ClassPathResource("documents/schema/resume.schema.json").getInputStream()) {
+        try (InputStream in = new ClassPathResource("docengine/schema/resume.schema.json").getInputStream()) {
             return in.readAllBytes();
         } catch (IOException e) {
             throw new IllegalStateException("Missing resume JSON schema", e);

@@ -15,7 +15,7 @@ import jakarta.validation.constraints.NotBlank;
 import jakarta.validation.constraints.NotNull;
 import jakarta.validation.constraints.Size;
 
-import com.careerpilot.backend.document.WebLink;
+import com.careerpilot.backend.docengine.WebLink;
 
 /**
  * The resume JSON format (schema version 2): basics plus an ordered list of sections the user chooses.

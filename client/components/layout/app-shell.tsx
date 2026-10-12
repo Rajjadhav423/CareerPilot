@@ -51,7 +51,8 @@ export function AppShell({ header, sidebar, children }: AppShellProps) {
     <TooltipProvider>
       <SidebarContext value={{ toggle }}>
         {header}
-        <div className="flex flex-1">
+        {/* The top bar is position: fixed (always visible, whatever the page contains); pt-12 makes room for it */}
+        <div className="flex flex-1 pt-12">
           {mobileOpen && (
             <div
               aria-hidden

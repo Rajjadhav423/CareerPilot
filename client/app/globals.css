@@ -362,6 +362,11 @@
   --radius-xl: 12px;
 }
 
+/* The app's top bar is fixed (3rem): keep focused fields and anchor targets from scrolling under it */
+html {
+  scroll-padding-top: 3.5rem;
+}
+
 body {
   background: var(--surface);
   color: var(--text);

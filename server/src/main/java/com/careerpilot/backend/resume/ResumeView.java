@@ -6,7 +6,7 @@ import java.util.Objects;
 import java.util.stream.Collectors;
 import java.util.stream.Stream;
 
-import com.careerpilot.backend.document.SafeUrls;
+import com.careerpilot.backend.docengine.SafeUrls;
 import com.careerpilot.backend.resume.ResumeData.Section;
 
 /**
@@ -89,7 +89,7 @@ public record ResumeView(String name, String headline, List<Contact> contacts, L
     }
 
     /** Link text without the scheme ("github.com/raj"), which reads better and survives ATS link stripping. */
-    private static java.util.Optional<Contact> link(String url) {
+    static java.util.Optional<Contact> link(String url) {
         return SafeUrls.webLink(url).map(safe -> {
             String text = safe.replaceFirst("^https?://(www\\.)?", "");
             if (text.endsWith("/")) {
@@ -107,7 +107,7 @@ public record ResumeView(String name, String headline, List<Contact> contacts, L
         return isBlank(finish) ? start : start + " – " + finish;
     }
 
-    private static String join(String separator, String... parts) {
+    static String join(String separator, String... parts) {
         String joined = Stream.of(parts).filter(Objects::nonNull).filter(p -> !p.isBlank())
                 .collect(Collectors.joining(separator));
         return joined.isEmpty() ? null : joined;

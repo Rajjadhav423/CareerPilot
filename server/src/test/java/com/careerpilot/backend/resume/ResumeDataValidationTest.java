@@ -14,7 +14,7 @@ import jakarta.validation.Validator;
 
 import org.junit.jupiter.api.Test;
 
-import com.careerpilot.backend.document.SafeUrls;
+import com.careerpilot.backend.docengine.SafeUrls;
 import com.careerpilot.backend.resume.ResumeData.Basics;
 import com.careerpilot.backend.resume.ResumeData.Entry;
 import com.careerpilot.backend.resume.ResumeData.Link;

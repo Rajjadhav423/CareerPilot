@@ -189,6 +189,58 @@ public class ResumeControllerIntegrationTest {
     }
 
     @Test
+    void aResumeCanBeADocumentWithHistoryAndSuggestions() throws Exception {
+        String id = idOf(create(RAJ, "Main", "classic"));
+
+        // The form content converted to a document is the starting point for document editing
+        String document = mockMvc.perform(post("/api/v1/resumes/document").with(RAJ).contentType(MediaType.APPLICATION_JSON)
+                        .content("{\"templateId\": \"modern\", \"data\": " + DATA + "}"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.schemaVersion").value(3))
+                .andExpect(jsonPath("$.preset").value("modern"))
+                .andExpect(jsonPath("$.sections[0].nodes[0].text").value("Raj Jadhav"))
+                .andReturn().getResponse().getContentAsString();
+
+        // Saving a document validates it with the document rules
+        String broken = document.replace("\"tag\":\"h1\"", "\"tag\":\"script\"");
+        mockMvc.perform(put("/api/v1/resumes/" + id).with(RAJ).contentType(MediaType.APPLICATION_JSON)
+                        .content("{\"title\": \"Main\", \"data\": " + DATA + ", \"document\": " + broken + "}"))
+                .andExpect(status().isBadRequest())
+                .andExpect(jsonPath("$.code").value("DOCUMENT_INVALID"))
+                .andExpect(jsonPath("$.issues[0].code").value("TAG_BLOCKED"));
+
+        mockMvc.perform(put("/api/v1/resumes/" + id).with(RAJ).contentType(MediaType.APPLICATION_JSON)
+                        .content("{\"title\": \"Main\", \"data\": " + DATA + ", \"document\": " + document + "}"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.document.sections[0].nodes[0].text").value("Raj Jadhav"))
+                .andExpect(jsonPath("$.data.basics.fullName").value("Raj Jadhav"));
+        mockMvc.perform(get("/api/v1/resumes/" + id).with(RAJ)).andExpect(jsonPath("$.document.preset").value("modern"));
+
+        // An assistant proposes a document; the diff compares documents node by node
+        String tailored = document.replace("Built payments", "Built payments for 10M users");
+        String versionId = JsonPath.read(mockMvc.perform(post("/api/v1/resumes/" + id + "/versions").with(RAJ)
+                        .contentType(MediaType.APPLICATION_JSON).content("{\"source\": \"AI\", \"document\": " + tailored + "}"))
+                .andExpect(status().isCreated())
+                .andExpect(jsonPath("$.document.schemaVersion").value(3))
+                .andReturn().getResponse().getContentAsString(), "$.id");
+        mockMvc.perform(get("/api/v1/resumes/" + id + "/versions/" + versionId + "/diff").with(RAJ))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.changes[?(@.field == 'text')].after").value(hasItem(containsString("10M users"))));
+        mockMvc.perform(post("/api/v1/resumes/" + id + "/versions/" + versionId + "/accept").with(RAJ))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.document.sections[2].nodes[1].children[1].children[0].html").value(containsString("10M users")));
+
+        mockMvc.perform(post("/api/v1/resumes/" + id + "/versions").with(RAJ).contentType(MediaType.APPLICATION_JSON).content("{}"))
+                .andExpect(status().isBadRequest())
+                .andExpect(jsonPath("$.code").value("PROPOSAL_EMPTY"));
+
+        // Back to the form: saving without a document clears it
+        mockMvc.perform(put("/api/v1/resumes/" + id).with(RAJ).contentType(MediaType.APPLICATION_JSON).content(request("Main", "classic", null)))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.document").isEmpty());
+    }
+
+    @Test
     void schemaAndNormalizeHelpPeopleAndAssistantsWriteValidJson() throws Exception {
         mockMvc.perform(get("/api/v1/resumes/schema").with(RAJ))
                 .andExpect(status().isOk())

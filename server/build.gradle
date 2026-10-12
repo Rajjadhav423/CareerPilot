@@ -27,8 +27,8 @@ dependencies {
     implementation 'org.springframework.boot:spring-boot-starter-security'
     implementation 'org.springframework.boot:spring-boot-starter-oauth2-resource-server'
     implementation 'org.flywaydb:flyway-database-postgresql'
-    // Documents: Thymeleaf renders resume data to XHTML (auto-escaped); OpenHTMLtoPDF (pure Java, PDFBox) prints it
-    implementation 'org.thymeleaf:thymeleaf'
+    // docengine: jsoup sanitizes inline HTML in document JSON; OpenHTMLtoPDF (pure Java, PDFBox) prints XHTML to PDF
+    implementation 'org.jsoup:jsoup:1.23.2'
     implementation 'io.github.openhtmltopdf:openhtmltopdf-pdfbox:1.1.97'
     runtimeOnly 'org.postgresql:postgresql'
     compileOnly 'org.projectlombok:lombok'

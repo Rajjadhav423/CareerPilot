@@ -45,22 +45,23 @@ export function newId(prefix: string) {
   return `${prefix}-${random}`;
 }
 
-export const emptyEntry = (): EditableEntry => ({
-  id: newId("e"), title: "", subtitle: "", location: "", startDate: "", endDate: "", current: false, url: "",
+export const emptyEntry = (id = newId("e")): EditableEntry => ({
+  id, title: "", subtitle: "", location: "", startDate: "", endDate: "", current: false, url: "",
   description: "", bullets: [], visible: true,
 });
-export const emptyGroup = (): EditableGroup => ({ id: newId("g"), name: "", keywords: [], visible: true });
+export const emptyGroup = (id = newId("g")): EditableGroup => ({ id, name: "", keywords: [], visible: true });
 
-export function newSection(type: SectionType, title: string): EditableSection {
+/** @param id a fixed id (for content rendered on the server); random when left out */
+export function newSection(type: SectionType, title: string, id?: string): EditableSection {
   return {
-    id: newId("s"),
+    id: id ?? newId("s"),
     type,
     title,
     visible: true,
-    entries: type === "entries" ? [emptyEntry()] : [],
+    entries: type === "entries" ? [emptyEntry(id ? `${id}-e1` : undefined)] : [],
     content: "",
     items: [],
-    groups: type === "skills" ? [emptyGroup()] : [],
+    groups: type === "skills" ? [emptyGroup(id ? `${id}-g1` : undefined)] : [],
   };
 }
 
@@ -89,11 +90,12 @@ export const SECTION_TYPES: { type: SectionType; label: string; hint: string }[]
 export function emptyResume(): EditableResume {
   return {
     basics: { fullName: "", headline: "", email: "", phone: "", location: "", links: [] },
+    // Fixed ids: the new-resume page is rendered on the server too, so random ids would differ in the browser
     sections: [
-      newSection("text", "Summary"),
-      newSection("entries", "Experience"),
-      newSection("entries", "Education"),
-      newSection("skills", "Skills"),
+      newSection("text", "Summary", "summary"),
+      newSection("entries", "Experience", "experience"),
+      newSection("entries", "Education", "education"),
+      newSection("skills", "Skills", "skills"),
     ],
     layout: null,
   };

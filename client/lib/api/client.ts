@@ -3,7 +3,8 @@ export const API_BASE_URL =
 
 /**
  * Error thrown for any failed API call. `status` is 0 when the server could not be reached.
- * `code` and `fieldErrors` come from the backend's ProblemDetail body when present.
+ * `code` and `fieldErrors` come from the backend's ProblemDetail body when present; `issues` lists the broken
+ * document rules for 400 DOCUMENT_INVALID (path is a JSON Pointer into the document).
  */
 export class ApiError extends Error {
   constructor(
@@ -11,6 +12,7 @@ export class ApiError extends Error {
     public readonly status: number,
     public readonly code?: string,
     public readonly fieldErrors: Record<string, string> = {},
+    public readonly issues: { path: string; code: string; message: string }[] = [],
   ) {
     super(message);
     this.name = "ApiError";
@@ -24,7 +26,12 @@ type ApiFetchOptions = Omit<RequestInit, "body"> & {
   json?: unknown;
 };
 
-type ProblemDetail = { detail?: string; code?: string; errors?: Record<string, string> };
+type ProblemDetail = {
+  detail?: string;
+  code?: string;
+  errors?: Record<string, string>;
+  issues?: { path: string; code: string; message: string }[];
+};
 
 export async function apiFetch<T>(path: string, options: ApiFetchOptions = {}): Promise<T> {
   const response = await apiRequest(path, "application/json", options);
@@ -65,6 +72,7 @@ async function apiRequest(path: string, accept: string, { token, json, ...init }
       response.status,
       problem.code,
       problem.errors ?? {},
+      problem.issues ?? [],
     );
   }
   return response;

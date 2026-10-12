@@ -3,12 +3,15 @@ package com.careerpilot.backend.resume;
 import java.util.List;
 import java.util.UUID;
 
+import org.springframework.beans.factory.annotation.Value;
 import org.springframework.http.HttpStatus;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
+import tools.jackson.databind.JsonNode;
+
 import com.careerpilot.backend.common.ApiException;
-import com.careerpilot.backend.document.PageSize;
+import com.careerpilot.backend.docengine.PageSize;
 import com.careerpilot.backend.resume.ResumeDtos.DiffResponse;
 import com.careerpilot.backend.resume.ResumeDtos.ProposalRequest;
 import com.careerpilot.backend.resume.ResumeDtos.ResumeRequest;
@@ -38,9 +41,12 @@ public class ResumeService {
     private final ResumeVersionRepository versions;
     private final ResumeDocumentService documents;
     private final ResumeJson json;
+    /** careerpilot.resumes.versions-enabled: off = no history rows are written and version endpoints are closed. */
+    private final boolean versionsEnabled;
 
     public ResumeService(ResumeRepository resumes, ResumeVersionRepository versions, ResumeDocumentService documents,
-            ResumeJson json) {
+            ResumeJson json, @Value("${careerpilot.resumes.versions-enabled:false}") boolean versionsEnabled) {
+        this.versionsEnabled = versionsEnabled;
         this.resumes = resumes;
         this.versions = versions;
         this.documents = documents;
@@ -65,7 +71,7 @@ public class ResumeService {
         }
         String templateId = documents.template(request.templateId()).id();
         Resume resume = resumes.saveAndFlush(new Resume(userId, request.title().strip(), templateId,
-                pageSize(request.pageSize()), json.write(request.data().normalized())));
+                pageSize(request.pageSize()), json.write(request.data().normalized()), document(request.document())));
         recordVersion(resume, "Created", Source.EDITOR, Status.SAVED);
         return response(resume);
     }
@@ -75,7 +81,7 @@ public class ResumeService {
         Resume resume = find(userId, id);
         String templateId = documents.template(request.templateId()).id();
         resume.update(request.title().strip(), templateId, pageSize(request.pageSize()),
-                json.write(request.data().normalized()));
+                json.write(request.data().normalized()), document(request.document()));
         resume = resumes.saveAndFlush(resume);
         recordVersion(resume, null, Source.EDITOR, Status.SAVED);
         return response(resume);
@@ -91,30 +97,34 @@ public class ResumeService {
     @Transactional(readOnly = true)
     public List<VersionSummary> versions(UUID userId, UUID resumeId) {
         Resume resume = find(userId, resumeId);
-        ResumeData current = data(resume);
+        if (!versionsEnabled) {
+            return List.of();
+        }
         return versions.findAllByResumeIdAndUserIdOrderByNumberDesc(resume.getId(), userId).stream()
                 .map(v -> new VersionSummary(v.getId(), v.getNumber(), v.getLabel(), v.getSource(), v.getStatus(),
-                        v.getStatus() == Status.PROPOSED ? ResumeDiff.between(current, json.read(v.getData())).size() : null,
+                        v.getStatus() == Status.PROPOSED ? changes(resume, v).size() : null,
                         v.getCreatedAt()))
                 .toList();
     }
 
     @Transactional(readOnly = true)
     public VersionResponse version(UUID userId, UUID resumeId, UUID versionId) {
+        requireVersions();
         return versionResponse(findVersion(userId, resumeId, versionId));
     }
 
     /** What would change if this version replaced the current resume. */
     @Transactional(readOnly = true)
     public DiffResponse diff(UUID userId, UUID resumeId, UUID versionId) {
+        requireVersions();
         Resume resume = find(userId, resumeId);
         ResumeVersion version = findVersion(userId, resumeId, versionId);
-        return new DiffResponse(version.getId(), version.getNumber(),
-                ResumeDiff.between(data(resume), json.read(version.getData())));
+        return new DiffResponse(version.getId(), version.getNumber(), changes(resume, version));
     }
 
     @Transactional
     public VersionResponse propose(UUID userId, UUID resumeId, ProposalRequest request) {
+        requireVersions();
         Resume resume = find(userId, resumeId);
         if (versions.countByResumeIdAndStatus(resume.getId(), Status.PROPOSED) >= MAX_OPEN_PROPOSALS) {
             throw new ApiException(HttpStatus.CONFLICT, "TOO_MANY_PROPOSALS",
@@ -125,9 +135,14 @@ public class ResumeService {
         PageSize pageSize = request.pageSize() == null ? resume.getPageSize() : request.pageSize();
         String label = request.label() == null || request.label().isBlank()
                 ? (source == Source.AI ? "AI suggestion" : "Imported JSON") : request.label().strip();
+        if (request.data() == null && request.document() == null) {
+            throw new ApiException(HttpStatus.BAD_REQUEST, "PROPOSAL_EMPTY", "Send resume \"data\" or a \"document\".");
+        }
+        // A document-only proposal keeps the current form content; a data-only proposal uses the form
+        String data = request.data() != null ? json.write(request.data().normalized()) : resume.getData();
         ResumeVersion version = versions.saveAndFlush(new ResumeVersion(resume.getId(), userId,
                 versions.maxNumber(resume.getId()) + 1, label, source, Status.PROPOSED, templateId, pageSize,
-                json.write(request.data().normalized())));
+                data, document(request.document())));
         return versionResponse(version);
     }
 
@@ -137,9 +152,11 @@ public class ResumeService {
      */
     @Transactional
     public ResumeResponse accept(UUID userId, UUID resumeId, UUID versionId) {
+        requireVersions();
         Resume resume = find(userId, resumeId);
         ResumeVersion version = findVersion(userId, resumeId, versionId);
-        resume.update(resume.getTitle(), version.getTemplateId(), version.getPageSize(), version.getData());
+        resume.update(resume.getTitle(), version.getTemplateId(), version.getPageSize(), version.getData(),
+                version.getDocument());
         resume = resumes.saveAndFlush(resume);
         if (version.getStatus() == Status.PROPOSED) {
             version.markAccepted();
@@ -153,6 +170,7 @@ public class ResumeService {
     /** Throws away a proposal. History entries can't be discarded. */
     @Transactional
     public void discard(UUID userId, UUID resumeId, UUID versionId) {
+        requireVersions();
         ResumeVersion version = findVersion(userId, resumeId, versionId);
         if (version.getStatus() != Status.PROPOSED) {
             throw new ApiException(HttpStatus.CONFLICT, "NOT_A_PROPOSAL", "Only suggestions can be discarded.");
@@ -178,9 +196,18 @@ public class ResumeService {
                 .orElseThrow(() -> new ApiException(HttpStatus.NOT_FOUND, "VERSION_NOT_FOUND", "Version not found."));
     }
 
+    private void requireVersions() {
+        if (!versionsEnabled) {
+            throw new ApiException(HttpStatus.NOT_FOUND, "VERSIONS_DISABLED", "Version history is turned off.");
+        }
+    }
+
     private void recordVersion(Resume resume, String label, Source source, Status status) {
+        if (!versionsEnabled) {
+            return;
+        }
         versions.saveAndFlush(new ResumeVersion(resume.getId(), resume.getUserId(), versions.maxNumber(resume.getId()) + 1,
-                label, source, status, resume.getTemplateId(), resume.getPageSize(), resume.getData()));
+                label, source, status, resume.getTemplateId(), resume.getPageSize(), resume.getData(), resume.getDocument()));
         // Keep history bounded: oldest saved versions go first; proposals and accepted proposals are kept
         List<ResumeVersion> saved = versions.findAllByResumeIdAndUserIdOrderByNumberDesc(resume.getId(), resume.getUserId())
                 .stream().filter(v -> v.getStatus() == Status.SAVED).toList();
@@ -193,6 +220,26 @@ public class ResumeService {
         return json.read(resume.getData()).normalized();
     }
 
+    /** A request's document, validated and normalized for storage; null when there is none. */
+    private String document(JsonNode document) {
+        return document == null || document.isNull() ? null : json.write(documents.normalizeDocument(document));
+    }
+
+    /**
+     * What would change if the version replaced the resume. Form-only on both sides: a field-level diff of the
+     * form data; otherwise both are compared as documents (a form side is converted first).
+     */
+    private List<ResumeDiff.Change> changes(Resume resume, ResumeVersion version) {
+        if (resume.getDocument() == null && version.getDocument() == null) {
+            return ResumeDiff.between(data(resume), json.read(version.getData()));
+        }
+        JsonNode before = resume.getDocument() != null ? json.tree(resume.getDocument())
+                : documents.toDocument(resume.getTemplateId(), resume.getPageSize(), data(resume));
+        JsonNode after = version.getDocument() != null ? json.tree(version.getDocument())
+                : documents.toDocument(version.getTemplateId(), version.getPageSize(), json.read(version.getData()));
+        return DocDiff.between(before, after);
+    }
+
     private static PageSize pageSize(PageSize value) {
         return value == null ? PageSize.A4 : value;
     }
@@ -200,17 +247,19 @@ public class ResumeService {
     private ResumeSummary summary(Resume resume) {
         ResumeData data = data(resume);
         return new ResumeSummary(resume.getId(), resume.getTitle(), resume.getTemplateId(), resume.getPageSize(),
-                data.basics().fullName(), (int) versions.countByResumeIdAndStatus(resume.getId(), Status.PROPOSED),
+                data.basics().fullName(),
+                versionsEnabled ? (int) versions.countByResumeIdAndStatus(resume.getId(), Status.PROPOSED) : 0,
                 resume.getCreatedAt(), resume.getUpdatedAt());
     }
 
     private ResumeResponse response(Resume resume) {
         return new ResumeResponse(resume.getId(), resume.getTitle(), resume.getTemplateId(), resume.getPageSize(),
-                data(resume), resume.getCreatedAt(), resume.getUpdatedAt());
+                data(resume), json.tree(resume.getDocument()), resume.getCreatedAt(), resume.getUpdatedAt());
     }
 
     private VersionResponse versionResponse(ResumeVersion v) {
         return new VersionResponse(v.getId(), v.getNumber(), v.getLabel(), v.getSource(), v.getStatus(),
-                v.getTemplateId(), v.getPageSize(), json.read(v.getData()).normalized(), v.getCreatedAt());
+                v.getTemplateId(), v.getPageSize(), json.read(v.getData()).normalized(), json.tree(v.getDocument()),
+                v.getCreatedAt());
     }
 }

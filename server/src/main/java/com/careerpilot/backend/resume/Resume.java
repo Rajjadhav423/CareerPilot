@@ -17,7 +17,7 @@ import jakarta.persistence.Table;
 import org.hibernate.annotations.ColumnTransformer;
 import org.hibernate.annotations.DynamicUpdate;
 
-import com.careerpilot.backend.document.PageSize;
+import com.careerpilot.backend.docengine.PageSize;
 
 /** A resume a user wrote in CareerPilot. Always loaded through its owner (see ResumeRepository). */
 @Entity
@@ -47,6 +47,11 @@ public class Resume {
     @ColumnTransformer(write = "?::jsonb")
     private String data;
 
+    /** A docEngine document (schema version 3) as JSON, or null. When set it's what gets rendered. */
+    @Column(columnDefinition = "jsonb")
+    @ColumnTransformer(write = "?::jsonb")
+    private String document;
+
     @Column(nullable = false, updatable = false)
     private Instant createdAt;
 
@@ -57,16 +62,17 @@ public class Resume {
         // for JPA
     }
 
-    Resume(UUID userId, String title, String templateId, PageSize pageSize, String data) {
+    Resume(UUID userId, String title, String templateId, PageSize pageSize, String data, String document) {
         this.userId = userId;
-        update(title, templateId, pageSize, data);
+        update(title, templateId, pageSize, data, document);
     }
 
-    void update(String title, String templateId, PageSize pageSize, String data) {
+    void update(String title, String templateId, PageSize pageSize, String data, String document) {
         this.title = title;
         this.templateId = templateId;
         this.pageSize = pageSize;
         this.data = data;
+        this.document = document;
     }
 
     @PrePersist
@@ -102,6 +108,10 @@ public class Resume {
 
     public String getData() {
         return data;
+    }
+
+    public String getDocument() {
+        return document;
     }
 
     public Instant getCreatedAt() {

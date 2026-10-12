@@ -54,6 +54,15 @@ public class ResumeJson {
         return json.writeValueAsString(data);
     }
 
+    /** A stored docEngine document (null stays null). */
+    public JsonNode tree(String value) {
+        return value == null ? null : json.readTree(value);
+    }
+
+    public String write(JsonNode document) {
+        return document == null ? null : json.writeValueAsString(document);
+    }
+
     private static boolean isLegacy(JsonNode node) {
         if (node.has("sections")) {
             return false;

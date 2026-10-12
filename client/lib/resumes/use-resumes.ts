@@ -21,6 +21,7 @@ import {
   type ResumeInput,
 } from "@/lib/api/resumes";
 import { saveResponseAsFile } from "@/lib/api/client";
+import { renderDocumentPdf } from "@/lib/api/docs";
 
 const RESUMES_KEY = ["resumes"] as const;
 
@@ -78,12 +79,15 @@ export function useDeleteResume() {
   });
 }
 
-/** Generates the PDF on the server and saves it with the server's file name. */
+/** Generates the PDF on the server (from the document when there is one) and saves it with the server's file name. */
 export function useDownloadResumePdf() {
   const { getToken } = useAuth();
   return useMutation({
     mutationFn: async (input: RenderInput) => {
-      const response = await renderResumePdf(input, await getToken());
+      const token = await getToken();
+      const response = input.document
+        ? await renderDocumentPdf(input.document, input.fileName, token)
+        : await renderResumePdf(input, token);
       await saveResponseAsFile(response, "Resume.pdf");
     },
   });

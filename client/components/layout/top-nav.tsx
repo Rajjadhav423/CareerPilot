@@ -12,7 +12,7 @@ import { ThemeMenu } from "./theme-menu";
 
 export function TopNav() {
   return (
-    <header className="sticky top-0 z-30 flex h-12 shrink-0 items-center gap-2 border-b border-border bg-surface px-2 md:px-3">
+    <header className="fixed inset-x-0 top-0 z-30 flex h-12 items-center gap-2 border-b border-border bg-surface px-2 md:px-3">
       <div className="flex shrink-0 items-center gap-1 md:w-64">
         <SidebarToggle />
         <Link

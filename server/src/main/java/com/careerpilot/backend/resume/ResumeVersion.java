@@ -15,7 +15,7 @@ import jakarta.persistence.Table;
 
 import org.hibernate.annotations.ColumnTransformer;
 
-import com.careerpilot.backend.document.PageSize;
+import com.careerpilot.backend.docengine.PageSize;
 
 /** One snapshot of a resume: a saved state, or a proposal waiting for the owner's decision. */
 @Entity
@@ -70,6 +70,11 @@ public class ResumeVersion {
     @ColumnTransformer(write = "?::jsonb")
     private String data;
 
+    /** The docEngine document of this version, or null for a form-only version. */
+    @Column(columnDefinition = "jsonb", updatable = false)
+    @ColumnTransformer(write = "?::jsonb")
+    private String document;
+
     @Column(nullable = false, updatable = false)
     private Instant createdAt;
 
@@ -78,7 +83,7 @@ public class ResumeVersion {
     }
 
     ResumeVersion(UUID resumeId, UUID userId, int number, String label, Source source, Status status, String templateId,
-            PageSize pageSize, String data) {
+            PageSize pageSize, String data, String document) {
         this.resumeId = resumeId;
         this.userId = userId;
         this.number = number;
@@ -88,6 +93,7 @@ public class ResumeVersion {
         this.templateId = templateId;
         this.pageSize = pageSize;
         this.data = data;
+        this.document = document;
     }
 
     @PrePersist
@@ -133,6 +139,10 @@ public class ResumeVersion {
 
     public String getData() {
         return data;
+    }
+
+    public String getDocument() {
+        return document;
     }
 
     public Instant getCreatedAt() {

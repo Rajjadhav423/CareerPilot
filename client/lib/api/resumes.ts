@@ -1,4 +1,5 @@
 import { apiFetch, apiFetchResponse } from "./client";
+import type { DocDocument } from "./docs";
 
 export type PageSize = "A4" | "LETTER";
 
@@ -74,11 +75,12 @@ export type ResumeSummary = {
   updatedAt: string;
 };
 
-export type Resume = Omit<ResumeSummary, "fullName" | "pendingProposals"> & { data: ResumeData };
+/** `document`: a docEngine document; when set it is what gets rendered (the form `data` is kept alongside). */
+export type Resume = Omit<ResumeSummary, "fullName" | "pendingProposals"> & { data: ResumeData; document: DocDocument | null };
 
-export type ResumeInput = { title: string; templateId: string; pageSize: PageSize; data: ResumeData };
+export type ResumeInput = { title: string; templateId: string; pageSize: PageSize; data: ResumeData; document?: DocDocument | null };
 
-export type RenderInput = { templateId: string; pageSize: PageSize; data: ResumeData; fileName?: string };
+export type RenderInput = { templateId: string; pageSize: PageSize; data: ResumeData; fileName?: string; document?: DocDocument | null };
 
 export type VersionSource = "EDITOR" | "IMPORT" | "AI" | "RESTORE";
 export type VersionStatus = "SAVED" | "PROPOSED" | "ACCEPTED";
@@ -98,6 +100,7 @@ export type ResumeVersion = Omit<ResumeVersionSummary, "changes"> & {
   templateId: string;
   pageSize: PageSize;
   data: ResumeData;
+  document: DocDocument | null;
 };
 
 /** Mirrors ResumeDiff.Change */
@@ -114,7 +117,9 @@ export type ProposalInput = {
   source?: "IMPORT" | "AI";
   templateId?: string;
   pageSize?: PageSize;
-  data: ResumeData;
+  /** The form format; or send a docEngine `document` instead (or both) */
+  data?: ResumeData;
+  document?: DocDocument;
 };
 
 export const RESUME_LIMITS = {
@@ -150,6 +155,11 @@ export function updateResume(id: string, input: ResumeInput, token: string | nul
 
 export function deleteResume(id: string, token: string | null) {
   return apiFetch<void>(`${BASE}/${id}`, { method: "DELETE", token });
+}
+
+/** The form content as a docEngine document, to continue editing as a document. */
+export function convertResumeToDocument(input: RenderInput, token: string | null) {
+  return apiFetch<DocDocument>(`${BASE}/document`, { method: "POST", json: input, token });
 }
 
 /** The resume JSON Schema, for people and AI assistants. */
