@@ -124,9 +124,11 @@ public class ResumeMcpController {
         tools.add(tool("create_resume_draft", "Create a resume draft in your CareerPilot account.", createSchema));
         var previewSchema = mapper.createObjectNode();
         previewSchema.put("type", "object");
-        previewSchema.set("properties", mapper.createObjectNode()
-                .set("templateId", mapper.createObjectNode().put("type", "string"))
-                .set("data", mapper.createObjectNode().put("type", "object").put("description", "Resume data matching get_resume_schema.")));
+        var previewProperties = mapper.createObjectNode();
+        previewProperties.set("templateId", mapper.createObjectNode().put("type", "string"));
+        previewProperties.set("data", mapper.createObjectNode().put("type", "object")
+                .put("description", "Resume data matching get_resume_schema."));
+        previewSchema.set("properties", previewProperties);
         previewSchema.set("required", mapper.createArrayNode().add("data"));
         previewSchema.put("additionalProperties", false);
         tools.add(tool("preview_resume", "Render resume HTML for review without saving it.", previewSchema));
