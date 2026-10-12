@@ -1,14 +1,11 @@
 package com.careerpilot.backend.mcp;
 
-import java.util.LinkedHashMap;
-import java.util.Map;
 import java.util.Set;
 import java.util.UUID;
 
 import jakarta.validation.ConstraintViolation;
 import jakarta.validation.Validator;
 
-import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.security.core.annotation.AuthenticationPrincipal;
 import org.springframework.security.oauth2.jwt.Jwt;
@@ -65,29 +62,34 @@ public class ResumeMcpController {
             return ResponseEntity.accepted().build();
         }
 
-        JsonNode result;
+        JsonNode result = null;
+        JsonNode rpcError = null;
         try {
             JsonNode params = request.path("params");
-            result = switch (method) {
-                case "initialize" -> initialize();
-                case "ping" -> mapper.createObjectNode();
-                case "tools/list" -> toolsList();
-                case "tools/call" -> callTool(jwt, params);
-                default -> error(-32601, "Method not found");
-            };
+            switch (method) {
+                case "initialize" -> result = initialize();
+                case "ping" -> result = mapper.createObjectNode();
+                case "tools/list" -> result = toolsList();
+                case "tools/call" -> result = callTool(jwt, params);
+                default -> rpcError = error(-32601, "Method not found");
+            }
         } catch (IllegalArgumentException ex) {
-            result = error(-32602, ex.getMessage() == null ? "Invalid tool arguments" : ex.getMessage());
+            rpcError = error(-32602, ex.getMessage() == null ? "Invalid tool arguments" : ex.getMessage());
         } catch (Exception ex) {
-            result = error(-32603, "The requested CareerPilot operation failed");
+            rpcError = error(-32603, "The requested CareerPilot operation failed");
         }
 
         var response = mapper.createObjectNode();
-        response.set("jsonrpc", mapper.getNodeFactory().textNode("2.0"));
+        response.put("jsonrpc", "2.0");
         if (!id.isMissingNode() && !id.isNull()) {
             response.set("id", id);
         }
-        response.set("result", result);
-        return ResponseEntity.status(HttpStatus.OK).body(response);
+        if (rpcError != null) {
+            response.set("error", rpcError);
+        } else {
+            response.set("result", result);
+        }
+        return ResponseEntity.ok(response);
     }
 
     private JsonNode initialize() {
@@ -113,7 +115,7 @@ public class ResumeMcpController {
         createSchema.put("type", "object");
         createSchema.set("properties", mapper.createObjectNode()
                 .set("title", mapper.createObjectNode().put("type", "string").put("maxLength", 120)));
-        ((com.fasterxml.jackson.databind.node.ObjectNode) createSchema.get("properties"))
+        ((tools.jackson.databind.node.ObjectNode) createSchema.get("properties"))
                 .set("templateId", mapper.createObjectNode().put("type", "string").put("maxLength", 40));
         ((com.fasterxml.jackson.databind.node.ObjectNode) createSchema.get("properties"))
                 .set("data", mapper.createObjectNode().put("type", "object").put("description", "Resume data matching get_resume_schema."));
