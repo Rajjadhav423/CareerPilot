@@ -59,7 +59,7 @@ export function JobResults({ jobs }: { jobs: JobPosting[] }) {
                 <Lozenge>{roleLabel[job.techRole]}</Lozenge>
                 <WorkplaceLozenge type={job.workplaceType} />
                 <span className="text-xs text-subtlest">
-                  {[posted, job.department, job.source].filter(Boolean).join(" · ")}
+                  {[posted, job.department, sourceLabel(job)].filter(Boolean).join(" · ")}
                 </span>
               </div>
             </li>
@@ -91,7 +91,7 @@ export function JobResults({ jobs }: { jobs: JobPosting[] }) {
                 </TableCell>
                 <TableCell className="whitespace-nowrap">
                   {job.company}
-                  <p className="text-xs text-subtlest">{job.source}</p>
+                  <p className="text-xs text-subtlest">{sourceLabel(job)}</p>
                 </TableCell>
                 <TableCell className="whitespace-nowrap">
                   <Lozenge>{roleLabel[job.techRole]}</Lozenge>
@@ -113,4 +113,9 @@ export function JobResults({ jobs }: { jobs: JobPosting[] }) {
       </div>
     </div>
   );
+}
+
+/** "Greenhouse" or "Greenhouse · also on Adzuna, Jooble" (duplicates found on other sources). */
+function sourceLabel(job: JobPosting) {
+  return job.alsoOn?.length ? `${job.source} · also on ${job.alsoOn.join(", ")}` : job.source;
 }

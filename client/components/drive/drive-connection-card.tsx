@@ -113,13 +113,14 @@ function FolderPicker() {
   const selected = status.data?.folderId ?? "";
 
   return (
-    <div className="flex flex-col gap-3 border-t border-border pt-4">
+    <div className="flex min-w-0 flex-col gap-3 border-t border-border pt-4">
       {(select.error || create.error || folders.error) && (
         <SectionMessage appearance="error" title="Folder action failed">
           {errorText(select.error ?? create.error ?? folders.error)}
         </SectionMessage>
       )}
-      <div className="grid gap-3 @2xl:grid-cols-2">
+      {/* grid-cols-1 = minmax(0, 1fr): a long folder name can never make the column wider than the card */}
+      <div className="grid grid-cols-1 gap-3 @2xl:grid-cols-2">
         <Field htmlFor="drive-folder-select" label="Save new PDFs in"
           hint={folders.data?.length ? "Only folders CareerPilot created are listed" : "A “CareerPilot” folder is created on your first save"}>
           <Select
@@ -135,15 +136,15 @@ function FolderPicker() {
           </Select>
         </Field>
         <form
-          className="flex flex-col gap-1"
+          className="flex min-w-0 flex-col gap-1"
           onSubmit={(event) => {
             event.preventDefault();
             if (newName.trim()) create.mutate(newName.trim(), { onSuccess: () => setNewName("") });
           }}
         >
           <label htmlFor="drive-new-folder" className="text-xs font-semibold text-subtle">New folder</label>
-          <div className="flex gap-2">
-            <TextField id="drive-new-folder" className="flex-1" placeholder="e.g. Applications 2026" value={newName}
+          <div className="flex min-w-0 gap-2">
+            <TextField id="drive-new-folder" className="min-w-0 flex-1" placeholder="e.g. Applications 2026" value={newName}
               maxLength={100} onChange={(e) => setNewName(e.target.value)} />
             <Button type="submit" isLoading={create.isPending} disabled={!newName.trim()}>
               <FolderPlus /> Create

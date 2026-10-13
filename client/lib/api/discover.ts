@@ -1,4 +1,4 @@
-import { apiFetch } from "./client";
+import { ApiError } from "./client";
 
 /** Mirrors com.careerpilot.backend.discovery.WorkplaceType */
 export type WorkplaceType = "ONSITE" | "HYBRID" | "REMOTE" | "UNSPECIFIED";
@@ -40,6 +40,8 @@ export type JobPosting = {
   postedAt: string | null;
   source: string;
   techRole: TechRole;
+  /** Other sources listing the same job (duplicates merged into this one) */
+  alsoOn?: string[];
 };
 
 export type SourceStatus = {
@@ -67,15 +69,26 @@ export type DiscoverParams = {
   /** Only this kind of tech job; omit for all tech jobs. */
   role?: TechRole | null;
   limit?: number;
-  /** Ignore the server's 15-minute cache and fetch every board again. */
+  /** Re-fetch the free sources now instead of using the cache. */
   refresh?: boolean;
 };
 
-export function discoverJobs(
-  { q = "", location = "", role, limit = 100, refresh = false }: DiscoverParams,
-  token: string | null,
-) {
+/**
+ * Find jobs is served by the Next.js route app/api/discover/jobs (same origin, Clerk session cookie): job sources
+ * are fetched and cached there. The Spring API's /api/v1/discover/jobs still exists but isn't used by the app.
+ */
+export async function discoverJobs({ q = "", location = "", role, limit = 100, refresh = false }: DiscoverParams) {
   const params = new URLSearchParams({ q, location, limit: String(limit), refresh: String(refresh) });
   if (role) params.set("role", role);
-  return apiFetch<DiscoverResponse>(`/api/v1/discover/jobs?${params}`, { token });
+  let response: Response;
+  try {
+    response = await fetch(`/api/discover/jobs?${params}`, { headers: { Accept: "application/json" }, cache: "no-store" });
+  } catch {
+    throw new ApiError("Couldn't reach CareerPilot. Check your connection.", 0);
+  }
+  if (!response.ok) {
+    const problem = (await response.json().catch(() => ({}))) as { detail?: string; code?: string };
+    throw new ApiError(problem.detail ?? `Request failed with status ${response.status}.`, response.status, problem.code);
+  }
+  return (await response.json()) as DiscoverResponse;
 }

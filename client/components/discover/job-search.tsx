@@ -24,16 +24,16 @@ const PAGE_SIZE = 100;
 
 type Result = { data: DiscoverResponse; error: null } | { data: null; error: string };
 
-async function load(params: DiscoverParams, getToken: () => Promise<string | null>): Promise<Result> {
+async function load(params: DiscoverParams): Promise<Result> {
   try {
-    return { data: await discoverJobs(params, await getToken()), error: null };
+    return { data: await discoverJobs(params), error: null };
   } catch (error) {
     return { data: null, error: error instanceof ApiError ? error.message : "Unexpected error." };
   }
 }
 
 export function JobSearch() {
-  const { getToken, isLoaded } = useAuth();
+  const { isLoaded } = useAuth();
   const [query, setQuery] = useState("");
   const [location, setLocation] = useState("");
   const [role, setRole] = useState<TechRole | null>(null);
@@ -46,18 +46,18 @@ export function JobSearch() {
   useEffect(() => {
     // Wait for Clerk: before it loads there is no session token yet.
     if (!isLoaded) return;
-    load({ limit: PAGE_SIZE }, getToken).then((next) => {
+    load({ limit: PAGE_SIZE }).then((next) => {
       if (latestRequest.current === 0) {
         setResult(next);
         setLoading(false);
       }
     });
-  }, [getToken, isLoaded]);
+  }, [isLoaded]);
 
   function run(params: DiscoverParams) {
     const requestId = ++latestRequest.current;
     setLoading(true);
-    load(params, getToken).then((next) => {
+    load(params).then((next) => {
       if (requestId !== latestRequest.current) return;
       setResult(next);
       setLoading(false);
