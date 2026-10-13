@@ -29,7 +29,7 @@ const features: Feature[] = [
   {
     icon: Search,
     title: "Find tech jobs in one place",
-    text: "Live openings straight from company career pages (Greenhouse, Lever, Ashby), refreshed every 15 minutes.",
+    text: "Live openings from company career pages and job boards, with duplicates merged.",
   },
   {
     icon: Filter,

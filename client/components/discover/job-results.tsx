@@ -55,6 +55,7 @@ export function JobResults({ jobs }: { jobs: JobPosting[] }) {
                 {job.company}
                 {job.location && <span className="text-subtle"> · {job.location}</span>}
               </p>
+              <ContactEmail job={job} />
               <div className="flex flex-wrap items-center gap-1.5 pt-0.5">
                 <Lozenge>{roleLabel[job.techRole]}</Lozenge>
                 <WorkplaceLozenge type={job.workplaceType} />
@@ -87,11 +88,12 @@ export function JobResults({ jobs }: { jobs: JobPosting[] }) {
               <TableRow key={job.id}>
                 <TableCell className="max-w-md">
                   <JobLink job={job} />
-                  {job.department && <p className="text-xs text-subtlest">{job.department}</p>}
+                  {job.department && <p className="line-clamp-2 text-xs text-subtlest">{job.department}</p>}
                 </TableCell>
                 <TableCell className="whitespace-nowrap">
                   {job.company}
                   <p className="text-xs text-subtlest">{sourceLabel(job)}</p>
+                  <ContactEmail job={job} />
                 </TableCell>
                 <TableCell className="whitespace-nowrap">
                   <Lozenge>{roleLabel[job.techRole]}</Lozenge>
@@ -118,4 +120,14 @@ export function JobResults({ jobs }: { jobs: JobPosting[] }) {
 /** "Greenhouse" or "Greenhouse · also on Adzuna, Jooble" (duplicates found on other sources). */
 function sourceLabel(job: JobPosting) {
   return job.alsoOn?.length ? `${job.source} · also on ${job.alsoOn.join(", ")}` : job.source;
+}
+
+/** The hiring email from the post itself, as a mail link (only shown when the company published one). */
+function ContactEmail({ job }: { job: JobPosting }) {
+  if (!job.contactEmail) return null;
+  return (
+    <a href={`mailto:${job.contactEmail}`} className="block max-w-full truncate text-xs text-link hover:underline">
+      {job.contactEmail}
+    </a>
+  );
 }

@@ -14,7 +14,7 @@ export default function FindJobsPage() {
       <PageHeader
         title="Find jobs"
         breadcrumbs={[{ label: "CareerPilot", href: ROUTES.dashboard }, { label: "Find jobs" }]}
-        description="Live tech openings from company career boards (Greenhouse, Lever, Ashby). Non-tech roles are filtered out. Refreshed every 15 minutes."
+        description="Live tech openings from company career boards, job boards and Hacker News, with duplicates merged. Non-tech roles are filtered out."
       />
       <JobSearch />
     </>

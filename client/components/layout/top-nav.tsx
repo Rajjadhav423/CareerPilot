@@ -1,7 +1,6 @@
 import Image from "next/image";
 import Link from "next/link";
 import { Search } from "lucide-react";
-import { UserButton } from "@clerk/nextjs";
 
 import { ROUTES } from "@/lib/routes";
 import logo from "@/app/icon.png";
@@ -9,6 +8,7 @@ import { TextField } from "@/components/ui/text-field";
 import { CreateMenu } from "./create-menu";
 import { SidebarToggle } from "./sidebar-toggle";
 import { ThemeMenu } from "./theme-menu";
+import { UserMenu } from "./user-menu";
 
 export function TopNav() {
   return (
@@ -39,7 +39,7 @@ export function TopNav() {
         <ThemeMenu />
         {/* Clerk's account menu: profile, security, sign out */}
         <div className="flex size-8 items-center justify-center pointer-coarse:size-10">
-          <UserButton />
+          <UserMenu />
         </div>
       </div>
     </header>

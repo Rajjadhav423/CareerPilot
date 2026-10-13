@@ -42,7 +42,9 @@ Existing UI components (check here first):
 `button` (variants: primary, default, subtle, danger, warning, link; sizes; `isSelected`, `isLoading`, `asChild`) ·
 `card` · `lozenge` (Jira status badge) · `badge` (counts) · `board` (Board/BoardColumn/BoardCard) · `table` ·
 `tabs` · `breadcrumbs` · `page-header` · `section-message` (alerts) · `empty-state` · `spinner` · `text-field` ·
-`textarea` · `select` · `field` (label + hint + error) · `dialog` · `dropdown-menu` · `tooltip`.
+`textarea` · `select` · `field` (label + hint + error) · `dialog` · `dropdown-menu` · `tooltip` ·
+`date-picker` (`DatePicker` field + popover, `Calendar` month grid; values are "YYYY-MM-DD"; use it instead of
+`<input type="date">`, whose popup ignores our theme).
 
 How a UI component is written (follow `button.tsx` / `card.tsx`):
 - One file per component, named exports, a function component taking `React.ComponentProps<"element">`

@@ -1,6 +1,7 @@
 import { cacheLife, cacheTag } from "next/cache";
 
 import type { WorkplaceType } from "@/lib/api/discover";
+import { cityName, countryName, type Place } from "./places";
 
 /*
  * Job sources for Find jobs, fetched on the server (Next.js on Vercel), never from the browser: API keys stay
@@ -22,6 +23,10 @@ export type RawPosting = {
   url: string;
   postedAt: string | null;
   source: string;
+  /** Structured country/city from the source; otherwise derived from `location` later */
+  places?: Place[];
+  /** A hiring contact the company published in the post itself (e.g. Hacker News "Who is hiring?") */
+  contactEmail?: string;
 };
 
 export type SourceResult = { postings: RawPosting[]; fetchedAt: string };
@@ -41,8 +46,14 @@ export type Source = {
   missing: string[];
 };
 
-/** Public company job boards, as in the backend (careerpilot.discovery.boards). */
-const COMPANY_BOARDS: [provider: "greenhouse" | "lever" | "ashby", slug: string, company: string][] = [
+type BoardProvider = "greenhouse" | "lever" | "ashby" | "smartrecruiters" | "recruitee";
+
+/**
+ * Public company job boards (no API key). The first group matches the backend (careerpilot.discovery.boards);
+ * the rest add companies hiring in India, Japan and Germany, and global remote-friendly companies.
+ * Every slug was checked to return jobs. To add one: provider, the company's board id, display name.
+ */
+const COMPANY_BOARDS: [provider: BoardProvider, slug: string, company: string][] = [
   ["greenhouse", "groww", "Groww"],
   ["greenhouse", "druva", "Druva"],
   ["greenhouse", "hackerrank", "HackerRank"],
@@ -56,11 +67,45 @@ const COMPANY_BOARDS: [provider: "greenhouse" | "lever" | "ashby", slug: string,
   ["ashby", "sarvam", "Sarvam AI"],
   ["ashby", "notion", "Notion"],
   ["ashby", "openai", "OpenAI"],
+  // India
+  ["greenhouse", "razorpaysoftwareprivatelimited", "Razorpay"],
+  ["lever", "fampay", "FamPay"],
+  ["lever", "mindtickle", "Mindtickle"],
+  ["smartrecruiters", "Freshworks", "Freshworks"],
+  // Japan
+  ["greenhouse", "paypay", "PayPay"],
+  // Germany
+  ["greenhouse", "n26", "N26"],
+  ["greenhouse", "celonis", "Celonis"],
+  ["greenhouse", "getyourguide", "GetYourGuide"],
+  ["greenhouse", "contentful", "Contentful"],
+  ["greenhouse", "traderepublicbank", "Trade Republic"],
+  ["greenhouse", "hellofresh", "HelloFresh"],
+  ["greenhouse", "sumup", "SumUp"],
+  ["smartrecruiters", "DeliveryHero", "Delivery Hero"],
+  // Global (many remote or India/Japan/Germany roles)
+  ["greenhouse", "gitlab", "GitLab"],
+  ["greenhouse", "coinbase", "Coinbase"],
+  ["greenhouse", "airbnb", "Airbnb"],
+  ["greenhouse", "rubrik", "Rubrik"],
+  ["ashby", "cohere", "Cohere"],
+  ["ashby", "linear", "Linear"],
+  ["ashby", "ramp", "Ramp"],
+  ["smartrecruiters", "ServiceNow", "ServiceNow"],
+  ["recruitee", "bunq", "bunq"],
+  // More India
+  ["greenhouse", "inmobi", "InMobi"],
+  ["greenhouse", "clear", "Clear (ClearTax)"],
+  ["greenhouse", "slice", "slice"],
+  ["lever", "fi", "Fi Money"],
+  ["ashby", "navi", "Navi"],
 ];
 
 const env = (name: string) => process.env[name]?.trim() || "";
 
-const PROVIDER_NAMES = { greenhouse: "Greenhouse", lever: "Lever", ashby: "Ashby" } as const;
+const PROVIDER_NAMES: Record<BoardProvider, string> = {
+  greenhouse: "Greenhouse", lever: "Lever", ashby: "Ashby", smartrecruiters: "SmartRecruiters", recruitee: "Recruitee",
+};
 
 /** Every source with whether it can run (API keys present). */
 export function listSources(): Source[] {
@@ -78,6 +123,8 @@ export function listSources(): Source[] {
   return [
     ...boards,
     feed("remotive", "Remotive", "feed"),
+    feed("remoteok", "Remote OK", "feed"),
+    feed("hackernews", "Hacker News", "feed"),
     feed("arbeitnow", "Arbeitnow", "feed"),
     feed("themuse", "The Muse", "feed"),
     feed("himalayas", "Himalayas", "feed"),
@@ -96,6 +143,8 @@ export const FREE_SOURCES_TAG = "discover-free";
 const REVALIDATE: Record<string, number> = {
   company: 15 * 60,
   remotive: 6 * 3600, // Remotive asks for at most ~4 calls a day
+  remoteok: 3 * 3600,
+  hackernews: 6 * 3600, // one thread a month
   arbeitnow: 3600,
   themuse: 3600,
   himalayas: 3600,
@@ -106,6 +155,43 @@ const REVALIDATE: Record<string, number> = {
   usajobs: 6 * 3600,
 };
 
+type MemoryEntry = { result: Promise<SourceResult>; fresh: number; expires: number };
+
+/** In-memory copy per server instance: instant filter changes, and the cache also works in `next dev`. */
+const memory = new Map<string, MemoryEntry>();
+
+/**
+ * A source's postings, fast: from this instance's memory while fresh; after that it's re-fetched in the
+ * background while the old copy is still served (until it fully expires). Failures aren't kept.
+ */
+export function sourcePostings(key: string): Promise<SourceResult> {
+  const now = Date.now();
+  const entry = memory.get(key);
+  if (entry && now < entry.fresh) return entry.result;
+  const kind = key.includes(":") ? "company" : key;
+  const freshMs = (REVALIDATE[kind] ?? 3600) * 1000;
+  const next = fetchSource(key);
+  const stored: MemoryEntry = { result: next, fresh: now + freshMs, expires: now + freshMs * 4 };
+  next.then(
+    () => memory.set(key, stored),
+    () => { if (memory.get(key) === stored) memory.delete(key); },
+  );
+  if (entry && now < entry.expires) {
+    // Serve the previous copy now; the new one replaces it when it arrives
+    entry.fresh = now + 60_000;
+    return entry.result;
+  }
+  memory.set(key, stored);
+  return next;
+}
+
+/** "Refresh": forget this instance's copies of the free sources. */
+export function forgetFreeSources() {
+  for (const key of memory.keys()) {
+    if (key.includes(":") || ["remotive", "remoteok", "hackernews", "arbeitnow", "themuse", "himalayas"].includes(key)) memory.delete(key);
+  }
+}
+
 /**
  * One source's postings, cached and shared by all users. A failure throws (and isn't cached), so the next
  * request tries again; the caller reports it without breaking the other sources.
@@ -115,7 +201,7 @@ export async function fetchSource(key: string): Promise<SourceResult> {
   const kind = key.includes(":") ? "company" : key;
   const revalidate = REVALIDATE[kind] ?? 3600;
   cacheLife({ stale: 300, revalidate, expire: Math.max(revalidate * 4, 86400) });
-  if (kind === "company" || ["remotive", "arbeitnow", "themuse", "himalayas"].includes(key)) {
+  if (kind === "company" || ["remotive", "remoteok", "hackernews", "arbeitnow", "themuse", "himalayas"].includes(key)) {
     cacheTag(FREE_SOURCES_TAG);
   }
   const postings = await load(key);
@@ -129,10 +215,14 @@ async function load(key: string): Promise<RawPosting[]> {
     if (!board) throw new Error(`Unknown board ${key}`);
     if (provider === "greenhouse") return greenhouse(slug, board[2]);
     if (provider === "lever") return lever(slug, board[2]);
+    if (provider === "smartrecruiters") return smartRecruiters(slug, board[2]);
+    if (provider === "recruitee") return recruitee(slug, board[2]);
     return ashby(slug, board[2]);
   }
   switch (key) {
     case "remotive": return remotive();
+    case "remoteok": return remoteOk();
+    case "hackernews": return hackerNews();
     case "arbeitnow": return arbeitnow();
     case "themuse": return theMuse();
     case "himalayas": return himalayas();
@@ -147,7 +237,8 @@ async function load(key: string): Promise<RawPosting[]> {
 
 // ---- helpers ----
 
-const TIMEOUT_MS = 10_000;
+// Some boards return a few MB (all postings at once); allow time on a cold start
+const TIMEOUT_MS = 15_000;
 
 async function getJson<T>(url: string, init: RequestInit = {}): Promise<T> {
   const response = await fetch(url, {
@@ -237,7 +328,119 @@ async function ashby(slug: string, company: string): Promise<RawPosting[]> {
   })).filter(notNull);
 }
 
+type SmartRecruitersJob = { id: string; name: string; releasedDate?: string; company?: { identifier?: string };
+  location?: { city?: string; country?: string; remote?: boolean; hybrid?: boolean; fullLocation?: string };
+  department?: { label?: string }; function?: { label?: string } };
+
+/** SmartRecruiters: newest 200 postings, with structured city and country. */
+async function smartRecruiters(slug: string, company: string): Promise<RawPosting[]> {
+  const pages = await Promise.all([0, 100].map((offset) => getJson<{ content?: SmartRecruitersJob[] }>(
+    `https://api.smartrecruiters.com/v1/companies/${encodeURIComponent(slug)}/postings?limit=100&offset=${offset}`,
+  )));
+  return pages.flatMap((page) => page.content ?? []).map((job) => {
+    const remote = job.location?.remote === true;
+    return posting({
+      id: `smartrecruiters-${slug}-${job.id}`, title: job.name, company,
+      location: text(job.location?.fullLocation?.replace(/,s*,/g, ",")) ?? text(job.location?.city),
+      department: text(job.department?.label) ?? text(job.function?.label),
+      workplaceType: remote ? "REMOTE" : job.location?.hybrid ? "HYBRID" : "UNSPECIFIED",
+      url: `https://jobs.smartrecruiters.com/${encodeURIComponent(slug)}/${encodeURIComponent(job.id)}`,
+      postedAt: isoDate(job.releasedDate), source: "SmartRecruiters",
+      places: [{ country: countryName(job.location?.country), city: cityName(job.location?.city), remote }],
+    });
+  }).filter(notNull);
+}
+
+type RecruiteeJob = { id: number; title: string; city?: string; country?: string; remote?: boolean; hybrid?: boolean;
+  careers_url: string; published_at?: string; department?: string; location?: string };
+
+/** Recruitee: all open offers, with structured city and country. */
+async function recruitee(slug: string, company: string): Promise<RawPosting[]> {
+  const data = await getJson<{ offers?: RecruiteeJob[] }>(`https://${slug}.recruitee.com/api/offers/`);
+  return (data.offers ?? []).map((job) => posting({
+    id: `recruitee-${slug}-${job.id}`, title: job.title, company,
+    location: text(job.location) ?? ([job.city, job.country].filter(Boolean).join(", ") || null),
+    department: text(job.department), workplaceType: job.remote ? "REMOTE" : job.hybrid ? "HYBRID" : "UNSPECIFIED",
+    url: job.careers_url, postedAt: isoDate(job.published_at), source: "Recruitee",
+    places: [{ country: countryName(job.country), city: cityName(job.city), remote: job.remote === true }],
+  })).filter(notNull);
+}
+
 // ---- free job boards (no key) ----
+
+const ENTITIES: Record<string, string> = { amp: "&", lt: "<", gt: ">", quot: '"', apos: "'", nbsp: " " };
+
+/** Hacker News comment HTML → plain text (tags removed, entities decoded, paragraphs as new lines). */
+function htmlToText(html: string) {
+  return html
+    .replace(/<p>/gi, "\n")
+    .replace(/<[^>]+>/g, "")
+    .replace(/&#x([0-9a-f]+);/gi, (_, hex) => String.fromCodePoint(Number.parseInt(hex, 16)))
+    .replace(/&#(\d+);/g, (_, dec) => String.fromCodePoint(Number(dec)))
+    .replace(/&([a-z]+);/gi, (match, name: string) => ENTITIES[name.toLowerCase()] ?? match);
+}
+
+const EMAIL = /[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\.[A-Za-z]{2,}/;
+
+/** The first email in the post, including common disguises: "jobs [at] acme [dot] com", "jobs(at)acme.com". */
+export function findEmail(text: string): string | null {
+  const plain = text
+    .replace(/\s*[[(<{]\s*at\s*[\])>}]\s*/gi, "@")
+    .replace(/\s*[[(<{]\s*dot\s*[\])>}]\s*/gi, ".");
+  const match = plain.match(EMAIL)?.[0]?.replace(/\.$/, "");
+  return match && match.length <= 254 && !/\.(png|jpe?g|gif|svg)$/i.test(match) ? match.toLowerCase() : null;
+}
+
+const ROLE_WORDS = /engineer|developer|scientist|architect|sre|devops|programmer|swe|sde|designer|analyst|lead|cto|head of|manager|researcher|intern|founding/i;
+const PLACE_WORDS = /remote|onsite|on-site|hybrid|\b[A-Z]{2}\b|,|city|york|london|berlin|bengaluru|bangalore|tokyo|india|germany|japan|usa|europe|emea|apac|worldwide/i;
+
+type HnItem = { id: number; created_at_i?: number; text?: string | null; children?: HnItem[] };
+
+/**
+ * Hacker News "Ask HN: Who is hiring?": the latest monthly thread, one posting per top-level comment.
+ * Companies write "Company | Role | Location | …" on the first line and often a hiring email in the text.
+ */
+async function hackerNews(): Promise<RawPosting[]> {
+  const stories = await getJson<{ hits?: { objectID: string; title?: string }[] }>(
+    "https://hn.algolia.com/api/v1/search_by_date?tags=story,author_whoishiring&hitsPerPage=10",
+  );
+  const thread = stories.hits?.find((hit) => /^ask hn: who is hiring\?/i.test(hit.title ?? ""));
+  if (!thread) return [];
+  const item = await getJson<HnItem>(`https://hn.algolia.com/api/v1/items/${encodeURIComponent(thread.objectID)}`);
+  return (item.children ?? []).map((comment) => {
+    if (!comment.text) return null;
+    const text = htmlToText(comment.text);
+    const firstLine = text.split("\n")[0].trim();
+    const parts = firstLine.split(/\s+[|—–]\s+|\s+-\s+/).map((part) => part.trim()).filter(Boolean);
+    if (parts.length < 2) return null;
+    const company = parts[0].replace(/\s*\(.*?\)\s*/g, " ").trim();
+    // Work-mode words aren't a role ("Company | ONSITE | City" → "Open roles")
+    const role = parts.slice(1).find((part) => ROLE_WORDS.test(part))
+      ?? parts.slice(1).find((part) => !/^(remote|onsite|on-site|hybrid|full[- ]?time|part[- ]?time|contract)/i.test(part) && !PLACE_WORDS.test(part))
+      ?? "Open roles";
+    const location = parts.slice(1).filter((part) => part !== role && PLACE_WORDS.test(part) && part.length <= 80).join(", ");
+    return posting({
+      id: `hackernews-${comment.id}`, title: role, company: company || "Unknown", location: location || null,
+      department: firstLine.slice(0, 200),
+      workplaceType: /remote/i.test(firstLine) ? "REMOTE" : /onsite|on-site/i.test(firstLine) ? "ONSITE" : /hybrid/i.test(firstLine) ? "HYBRID" : "UNSPECIFIED",
+      url: `https://news.ycombinator.com/item?id=${comment.id}`, postedAt: isoDate(comment.created_at_i), source: "Hacker News",
+      contactEmail: findEmail(text) ?? undefined,
+    });
+  }).filter(notNull);
+}
+
+type RemoteOkJob = { id?: string; slug?: string; epoch?: number; date?: string; company?: string; position?: string;
+  tags?: string[]; location?: string; url?: string; apply_url?: string };
+
+/** Remote OK: remote jobs. Their terms: link back to the Remote OK page and name Remote OK as the source. */
+async function remoteOk(): Promise<RawPosting[]> {
+  const data = await getJson<RemoteOkJob[]>("https://remoteok.com/api");
+  return (Array.isArray(data) ? data : []).filter((job) => job.id && job.position).map((job) => posting({
+    id: `remoteok-${job.id}`, title: job.position, company: job.company ?? "Unknown",
+    location: text(job.location) ?? "Remote", department: (job.tags ?? []).join(", ") || null, workplaceType: "REMOTE",
+    url: job.url, postedAt: isoDate(job.date ?? job.epoch), source: "Remote OK",
+  })).filter(notNull);
+}
 
 type RemotiveJob = { id: number; url: string; title: string; company_name: string; category?: string; job_type?: string; publication_date?: string; candidate_required_location?: string };
 
@@ -298,7 +501,8 @@ async function himalayas(): Promise<RawPosting[]> {
   return jobs.map((job) => posting({
     id: `himalayas-${job.guid ?? job.applicationLink}`, title: job.title, company: job.companyName ?? "Unknown",
     location: (job.locationRestrictions ?? []).join(", ") || "Remote",
-    department: [...(job.parentCategories ?? []), ...(job.categories ?? [])].join(", ") || null,
+    // The main category only ("Developer"); the long tag list stays out of the cards
+    department: (job.parentCategories ?? []).join(", ") || null,
     workplaceType: "REMOTE", url: job.applicationLink ?? job.guid, postedAt: isoDate(job.pubDate), source: "Himalayas",
   })).filter(notNull);
 }
