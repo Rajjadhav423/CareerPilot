@@ -38,17 +38,25 @@ type ComposeEmailDialogProps = {
   job: Job;
   open: boolean;
   onOpenChange: (open: boolean) => void;
+  /** Recipient to start with, e.g. the HR email found when the job was added. Defaults to one in the job's notes. */
+  initialTo?: string;
 };
+
+/** "HR email: hr@acme.com" saved in the job's notes when it was added from a post. */
+export function contactEmailOf(job: Job): string {
+  const match = /[A-Za-z0-9._%+-]+@[A-Za-z0-9-]+(?:\.[A-Za-z0-9-]+)*\.[A-Za-z]{2,}/.exec(job.notes ?? "");
+  return match?.[0] ?? "";
+}
 
 /**
  * Write an application email for one job: pick a template, edit the filled-in draft, review, then send from
  * the user's Gmail. Edits only change this email, never the saved template.
  */
-export function ComposeEmailDialog({ job, open, onOpenChange }: ComposeEmailDialogProps) {
+export function ComposeEmailDialog({ job, open, onOpenChange, initialTo }: ComposeEmailDialogProps) {
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent className="max-w-2xl">
-        {open && <Composer job={job} onClose={() => onOpenChange(false)} />}
+        {open && <Composer job={job} initialTo={initialTo ?? contactEmailOf(job)} onClose={() => onOpenChange(false)} />}
       </DialogContent>
     </Dialog>
   );
@@ -61,7 +69,7 @@ function errorMessage(error: unknown) {
   return error instanceof ApiError ? error.message : "Unexpected error.";
 }
 
-function Composer({ job, onClose }: { job: Job; onClose: () => void }) {
+function Composer({ job, initialTo, onClose }: { job: Job; initialTo: string; onClose: () => void }) {
   const queryClient = useQueryClient();
   const templates = useTemplates();
   const gmail = useGmailStatus();
@@ -73,7 +81,7 @@ function Composer({ job, onClose }: { job: Job; onClose: () => void }) {
   const [step, setStep] = useState<Step>("compose");
   const [templateId, setTemplateId] = useState<string | null>(null);
   const [composed, setComposed] = useState<ComposedEmail | null>(null);
-  const [draft, setDraft] = useState<Draft>({ to: "", subject: "", body: "" });
+  const [draft, setDraft] = useState<Draft>({ to: initialTo, subject: "", body: "" });
   const [toTouched, setToTouched] = useState(false);
   const [reviewed, setReviewed] = useState(false);
   const [result, setResult] = useState<SendEmailResult | null>(null);

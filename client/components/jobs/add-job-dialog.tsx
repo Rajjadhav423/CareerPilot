@@ -1,11 +1,13 @@
 "use client";
 
 import { useRef, useState } from "react";
-import { Link2, Loader2, Sparkles } from "lucide-react";
+import { Link2, Loader2, Mail, Sparkles } from "lucide-react";
 
 import { ApiError } from "@/lib/api/client";
-import type { WorkMode } from "@/lib/api/jobs";
+import type { Job, WorkMode } from "@/lib/api/jobs";
+import { isValidEmailAddress } from "@/lib/email/placeholders";
 import { useCreateJob } from "@/lib/jobs/use-jobs";
+import { ComposeEmailDialog } from "@/components/applications/compose-email-dialog";
 import { Button } from "@/components/ui/button";
 import {
   Dialog,
@@ -30,9 +32,11 @@ type FormState = {
   workMode: "" | WorkMode;
   jobUrl: string;
   description: string;
+  /** HR / recruiter email from the post; kept in the job's notes so emailing later can use it */
+  hrEmail: string;
 };
 
-const EMPTY: FormState = { title: "", company: "", location: "", workMode: "", jobUrl: "", description: "" };
+const EMPTY: FormState = { title: "", company: "", location: "", workMode: "", jobUrl: "", description: "", hrEmail: "" };
 
 function validate(form: FormState): Record<string, string> {
   const errors: Record<string, string> = {};
@@ -40,6 +44,9 @@ function validate(form: FormState): Record<string, string> {
   if (!form.company.trim()) errors.company = "Enter the company";
   if (form.jobUrl.trim() && !/^https?:\/\/\S+$/.test(form.jobUrl.trim())) {
     errors.jobUrl = "Enter a full link starting with https://";
+  }
+  if (form.hrEmail.trim() && !isValidEmailAddress(form.hrEmail.trim())) {
+    errors.hrEmail = "Enter one email address, e.g. hr@company.com";
   }
   return errors;
 }
@@ -59,6 +66,11 @@ export function AddJobDialog({ open, onOpenChange }: AddJobDialogProps) {
   const [scrapeError, setScrapeError] = useState<string | null>(null);
   const [linkedinUrl, setLinkedinUrl] = useState("");
   const scrapeAbortRef = useRef<AbortController | null>(null);
+  const [usedAi, setUsedAi] = useState(false);
+  /** Which button saved: true for "Add & email HR" (for its spinner) */
+  const [savingToEmail, setSavingToEmail] = useState(false);
+  /** The job just saved with "Add & email HR": its email opens next, to this address */
+  const [emailJob, setEmailJob] = useState<{ job: Job; to: string } | null>(null);
   const createJob = useCreateJob();
 
   function update<K extends keyof FormState>(key: K, value: FormState[K]) {
@@ -80,6 +92,7 @@ export function AddJobDialog({ open, onOpenChange }: AddJobDialogProps) {
       setScrapeState("idle");
       setScrapeError(null);
       setLinkedinUrl("");
+      setUsedAi(false);
       createJob.reset();
     }
   }
@@ -107,7 +120,7 @@ export function AddJobDialog({ open, onOpenChange }: AddJobDialogProps) {
       });
       const data = await resp.json() as {
         title?: string; company?: string; location?: string;
-        workMode?: string; description?: string; jobUrl?: string; error?: string;
+        workMode?: string; description?: string; jobUrl?: string; hrEmail?: string; ai?: boolean; error?: string;
       };
       if (!resp.ok) {
         setScrapeError(data.error ?? `Server responded with ${resp.status}.`);
@@ -122,7 +135,9 @@ export function AddJobDialog({ open, onOpenChange }: AddJobDialogProps) {
         workMode: (prev.workMode || (["ONSITE", "HYBRID", "REMOTE"].includes(data.workMode ?? "") ? data.workMode as WorkMode : "")) as "" | WorkMode,
         jobUrl: prev.jobUrl || data.jobUrl || url,
         description: prev.description || data.description || "",
+        hrEmail: prev.hrEmail || data.hrEmail || "",
       }));
+      setUsedAi(!!data.ai);
       setScrapeState("done");
     } catch (err) {
       if (err instanceof DOMException && err.name === "AbortError") return;
@@ -131,12 +146,15 @@ export function AddJobDialog({ open, onOpenChange }: AddJobDialogProps) {
     }
   }
 
-  function submit(event: React.FormEvent) {
-    event.preventDefault();
+  /** Saves the job; with `thenEmail`, opens the application email to the HR address right after. */
+  function save(thenEmail: boolean) {
     const found = validate(form);
+    if (thenEmail && !form.hrEmail.trim()) found.hrEmail = "Add the email to send the application to";
     setErrors(found);
     if (Object.keys(found).length > 0) return;
 
+    const hrEmail = form.hrEmail.trim();
+    setSavingToEmail(thenEmail);
     createJob.mutate(
       {
         title: form.title,
@@ -145,9 +163,13 @@ export function AddJobDialog({ open, onOpenChange }: AddJobDialogProps) {
         workMode: form.workMode || null,
         jobUrl: form.jobUrl || null,
         description: form.description || null,
+        notes: hrEmail ? `HR email: ${hrEmail}` : null,
       },
       {
-        onSuccess: () => close(false),
+        onSuccess: (job) => {
+          close(false);
+          if (thenEmail) setEmailJob({ job, to: hrEmail });
+        },
         onError: (error) => {
           if (error instanceof ApiError) setErrors(error.fieldErrors);
         },
@@ -155,9 +177,15 @@ export function AddJobDialog({ open, onOpenChange }: AddJobDialogProps) {
     );
   }
 
+  function submit(event: React.FormEvent) {
+    event.preventDefault();
+    save(false);
+  }
+
   const serverError = createJob.error instanceof ApiError ? createJob.error.message : createJob.error ? "Unexpected error." : null;
 
   return (
+    <>
     <Dialog open={open} onOpenChange={close}>
       <DialogContent>
         <form onSubmit={submit} noValidate className="flex min-h-0 flex-col">
@@ -227,7 +255,8 @@ export function AddJobDialog({ open, onOpenChange }: AddJobDialogProps) {
               )}
               {scrapeState === "done" && (
                 <p className="text-xs text-success-text" role="status">
-                  ✓ Details filled in — review and edit as needed.
+                  ✓ Details filled in{usedAi ? " by AI" : ""}
+                  {form.hrEmail ? " and an HR email found" : ""} — review and edit as needed.
                 </p>
               )}
             </div>
@@ -281,6 +310,22 @@ export function AddJobDialog({ open, onOpenChange }: AddJobDialogProps) {
               </Field>
             </div>
 
+            <Field htmlFor="job-hr-email" label="HR / recruiter email"
+              hint="Where to send your application. Found in the post when it has one." error={errors.hrEmail}>
+              <TextField
+                id="job-hr-email"
+                type="email"
+                inputMode="email"
+                autoComplete="off"
+                placeholder="e.g. hr@company.com"
+                value={form.hrEmail}
+                onChange={(e) => update("hrEmail", e.target.value)}
+                aria-invalid={!!errors.hrEmail}
+                aria-describedby={errors.hrEmail ? "job-hr-email-error" : undefined}
+                maxLength={254}
+              />
+            </Field>
+
             <Field htmlFor="job-url" label="Job posting link" hint="Where you found it or where to apply" error={errors.jobUrl}>
               <TextField
                 id="job-url"
@@ -310,12 +355,24 @@ export function AddJobDialog({ open, onOpenChange }: AddJobDialogProps) {
             <DialogClose asChild>
               <Button variant="subtle">Cancel</Button>
             </DialogClose>
-            <Button type="submit" variant="primary" isLoading={createJob.isPending}>
+            <Button type="submit" variant={form.hrEmail.trim() ? "default" : "primary"}
+              isLoading={createJob.isPending && !savingToEmail}>
               Add job
             </Button>
+            {form.hrEmail.trim() && (
+              <Button type="button" variant="primary" disabled={createJob.isPending}
+                isLoading={createJob.isPending && savingToEmail} onClick={() => save(true)}>
+                <Mail /> Add &amp; email HR
+              </Button>
+            )}
           </DialogFooter>
         </form>
       </DialogContent>
     </Dialog>
+    {emailJob && (
+      <ComposeEmailDialog job={emailJob.job} initialTo={emailJob.to} open
+        onOpenChange={(next) => !next && setEmailJob(null)} />
+    )}
+    </>
   );
 }

@@ -1,4 +1,7 @@
+import { auth } from "@clerk/nextjs/server";
 import { NextRequest, NextResponse } from "next/server";
+
+import { extractWithAi, findEmails, pageText } from "@/lib/jobs/server/ai-extract";
 
 /** Very lightweight HTML entity decoder for common entities only. */
 function decodeEntities(html: string): string {
@@ -75,9 +78,17 @@ export interface ScrapedJob {
   workMode: "ONSITE" | "HYBRID" | "REMOTE" | "";
   description: string;
   jobUrl: string;
+  /** HR / recruiter email found in the post ("" when none) */
+  hrEmail: string;
+  /** True when the details were read by the AI (Groq), false for the rule-based fallback */
+  ai: boolean;
 }
 
 export async function POST(req: NextRequest) {
+  // Signed-in users only: the AI step uses our Groq quota
+  const { userId } = await auth();
+  if (!userId) return NextResponse.json({ error: "Please sign in again." }, { status: 401 });
+
   let url: string;
   try {
     const body = await req.json() as { url?: unknown };
@@ -186,6 +197,18 @@ export async function POST(req: NextRequest) {
     description = decodeEntities(description);
   }
 
+  // AI pass (Groq): reads the page's visible text, fixes up the fields and finds the HR email
+  const text = pageText(html);
+  const ai = await extractWithAi(`${description}\n\n${text}`, { title, company });
+  if (ai) {
+    title = ai.title || title;
+    company = ai.company || company;
+    location = ai.location || location;
+    workMode = ai.workMode || workMode;
+    description = ai.description || description;
+  }
+  const hrEmail = ai?.hrEmail || findEmails(`${description}\n${text}`)[0] || "";
+
   // If we couldn't extract meaningful data, LinkedIn probably required login
   if (!title && !company && !description) {
     return NextResponse.json(
@@ -204,6 +227,8 @@ export async function POST(req: NextRequest) {
     workMode,
     description: description.slice(0, 20_000),
     jobUrl: url,
+    hrEmail,
+    ai: !!ai,
   };
 
   return NextResponse.json(result);
