@@ -1,11 +1,10 @@
 import Image from "next/image";
 import Link from "next/link";
-import { Search } from "lucide-react";
 
 import { ROUTES } from "@/lib/routes";
 import logo from "@/app/icon.png";
-import { TextField } from "@/components/ui/text-field";
 import { CreateMenu } from "./create-menu";
+import { GlobalSearch } from "./global-search";
 import { SidebarToggle } from "./sidebar-toggle";
 import { ThemeMenu } from "./theme-menu";
 import { UserMenu } from "./user-menu";
@@ -25,13 +24,7 @@ export function TopNav() {
       </div>
 
       <div className="flex flex-1 items-center justify-end gap-2 md:justify-center">
-        <TextField
-          className="hidden w-full max-w-170 sm:flex"
-          elemBefore={<Search />}
-          placeholder="Search (coming soon)"
-          aria-label="Search"
-          disabled
-        />
+        <GlobalSearch />
         <CreateMenu />
       </div>
 
