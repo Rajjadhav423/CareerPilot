@@ -78,9 +78,20 @@ export type ResumeSummary = {
 /** `document`: a docEngine document; when set it is what gets rendered (the form `data` is kept alongside). */
 export type Resume = Omit<ResumeSummary, "fullName" | "pendingProposals"> & { data: ResumeData; document: DocDocument | null };
 
-export type ResumeInput = { title: string; templateId: string; pageSize: PageSize; data: ResumeData; document?: DocDocument | null };
+/**
+ * `document`: save this document as the resume. `baseDocument`: the form was edited; the server merges the form into
+ * this document (keeping its styles) and saves the result.
+ */
+export type ResumeInput = {
+  title: string; templateId: string; pageSize: PageSize; data: ResumeData;
+  document?: DocDocument | null; baseDocument?: DocDocument | null;
+};
 
-export type RenderInput = { templateId: string; pageSize: PageSize; data: ResumeData; fileName?: string; document?: DocDocument | null };
+/** `document`: render this document. `baseDocument`: render the form merged into this document (its styles kept). */
+export type RenderInput = {
+  templateId: string; pageSize: PageSize; data: ResumeData; fileName?: string;
+  document?: DocDocument | null; baseDocument?: DocDocument | null;
+};
 
 export type VersionSource = "EDITOR" | "IMPORT" | "AI" | "RESTORE";
 export type VersionStatus = "SAVED" | "PROPOSED" | "ACCEPTED";
@@ -157,9 +168,16 @@ export function deleteResume(id: string, token: string | null) {
   return apiFetch<void>(`${BASE}/${id}`, { method: "DELETE", token });
 }
 
-/** The form content as a docEngine document, to continue editing as a document. */
+/** The form content as a docEngine document; with `baseDocument`, merged into it so its styles are kept. */
 export function convertResumeToDocument(input: RenderInput, token: string | null) {
   return apiFetch<DocDocument>(`${BASE}/document`, { method: "POST", json: input, token });
+}
+
+/** A document read back into the form (content only; the styling stays in the document). */
+export function convertDocumentToForm(document: DocDocument, token: string | null) {
+  return apiFetch<{ templateId: string; pageSize: PageSize; data: ResumeData }>(`${BASE}/form`, {
+    method: "POST", json: { document }, token,
+  });
 }
 
 /** The resume JSON Schema, for people and AI assistants. */
@@ -212,9 +230,9 @@ export async function renderResumePreview(input: RenderInput, token: string | nu
   return response.text();
 }
 
-/** The PDF's pages as base64 PNG images: a preview that matches the PDF exactly. */
+/** The PDF (base64) and its page count; the preview draws the pages in the browser, exactly as the PDF. */
 export function renderResumePages(input: RenderInput, token: string | null, signal?: AbortSignal) {
-  return apiFetch<{ pageCount: number; pages: string[] }>(`${BASE}/render/pages`, {
+  return apiFetch<{ pageCount: number; pdf: string }>(`${BASE}/render/pages`, {
     method: "POST",
     json: input,
     token,

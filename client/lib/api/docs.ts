@@ -52,8 +52,9 @@ export function validateDocument(document: unknown, mode: DocMode, token: string
   return apiFetch<DocValidation>(`${BASE}/validate`, { method: "POST", json: { document, mode }, token, signal });
 }
 
+/** The PDF (base64) and its page count; the preview draws the pages in the browser. */
 export function renderDocumentPages(document: unknown, token: string | null, signal?: AbortSignal) {
-  return apiFetch<{ pageCount: number; pages: string[] }>(`${BASE}/render/pages`, {
+  return apiFetch<{ pageCount: number; pdf: string }>(`${BASE}/render/pages`, {
     method: "POST",
     json: { document },
     token,

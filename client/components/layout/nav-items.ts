@@ -34,10 +34,10 @@ export const navSections: NavSection[] = [
     ],
   },
   {
-    title: "Coming soon",
+    title: "Account",
     items: [
-      { label: "Profile", href: ROUTES.profile, icon: UserRound, comingSoon: true },
-      { label: "Settings", href: ROUTES.settings, icon: Settings, comingSoon: true },
+      { label: "Profile", href: ROUTES.profile, icon: UserRound },
+      { label: "Settings", href: ROUTES.settings, icon: Settings },
     ],
   },
 ];

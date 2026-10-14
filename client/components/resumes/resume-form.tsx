@@ -32,7 +32,7 @@ import { Lozenge } from "@/components/ui/lozenge";
 import { TextField } from "@/components/ui/text-field";
 import { Textarea } from "@/components/ui/textarea";
 
-const FORMAT_HINT = "Use **bold**, *italic* or [link text](https://…)";
+const FORMAT_HINT = "Use **bold**, *italic*, [link text](https://…) or saved details like {{github}}";
 const TYPE_LABEL: Record<SectionType, string> = { entries: "Entries", text: "Paragraph", list: "Bullet list", skills: "Skills" };
 
 type ResumeFormProps = {

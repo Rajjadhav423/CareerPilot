@@ -34,3 +34,15 @@ export const clerkAppearance = {
     footer: "bg-surface-sunken",
   },
 } as const;
+
+/**
+ * Text overrides for Clerk's screens. The profile photo comes from the sign-in account and can't be uploaded in
+ * CareerPilot, so the upload size hint is blanked (a single space: Clerk falls back to its default for "").
+ */
+export const clerkLocalization = {
+  userProfile: {
+    profilePage: {
+      fileDropAreaHint: " ",
+    },
+  },
+};

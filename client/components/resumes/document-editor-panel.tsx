@@ -2,14 +2,19 @@
 
 import { useEffect, useRef, useState } from "react";
 import { useAuth } from "@clerk/nextjs";
-import { AlignLeft, BookOpen, Check, Copy, Download, LayoutList, ShieldCheck, Wand2 } from "lucide-react";
+import { AlignLeft, BookOpen, Check, Copy, Download, Eraser, FileText, ShieldCheck, Wand2 } from "lucide-react";
 
 import { ApiError } from "@/lib/api/client";
 import { getDocumentRules, validateDocument, type DocIssue, type DocValidation } from "@/lib/api/docs";
 import { locatePointer } from "@/lib/docs/json-locate";
+import { locateText } from "@/lib/docs/locate-text";
 import { parseJsonLeniently } from "@/lib/docs/json-repair";
+import { SAMPLE_DOCUMENT_TEXT } from "@/lib/docs/sample-document";
 import { Button } from "@/components/ui/button";
+import { FieldsMenu } from "@/components/settings/fields-menu";
 import { Card } from "@/components/ui/card";
+import { CodeEditor, type CodeEditorHandle } from "@/components/ui/code-editor";
+import { ConfirmDialog } from "@/components/ui/confirm-dialog";
 import {
   Dialog,
   DialogBody,
@@ -21,7 +26,7 @@ import {
 import { Lozenge } from "@/components/ui/lozenge";
 import { SectionMessage } from "@/components/ui/section-message";
 import { Spinner } from "@/components/ui/spinner";
-import { Textarea } from "@/components/ui/textarea";
+import { Tooltip } from "@/components/ui/tooltip";
 
 const MAX_CHARS = 500_000;
 
@@ -35,8 +40,8 @@ type DocumentEditorPanelProps = {
   previewIssues: DocIssue[];
   /** Shown above the editor, e.g. that editing turns the resume into a document. */
   notice?: string;
-  backLabel?: string;
-  onBackToForm: () => void;
+  /** Text selected in the preview: select where it's written in the JSON (a new `id` asks again). */
+  reveal?: { text: string; occurrence: number; id: number } | null;
 };
 
 /**
@@ -44,14 +49,16 @@ type DocumentEditorPanelProps = {
  * The preview follows every valid change; Check runs the strict rules, Auto-fix repairs what it can.
  */
 export function DocumentEditorPanel({
-  value, onChange, parseError, previewIssues, notice, backLabel = "Use the form instead", onBackToForm,
+  value, onChange, parseError, previewIssues, notice, reveal,
 }: DocumentEditorPanelProps) {
   const { getToken } = useAuth();
-  const editor = useRef<HTMLTextAreaElement>(null);
+  const editor = useRef<CodeEditorHandle>(null);
   const [checking, setChecking] = useState<"strict" | "lenient" | null>(null);
   const [result, setResult] = useState<DocValidation | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [rulesOpen, setRulesOpen] = useState(false);
+  /** Which replacement is waiting for confirmation */
+  const [pending, setPending] = useState<"sample" | "clear" | null>(null);
 
   /** The JSON; Auto-fix and Format also repair copy-paste damage (fences, stray backslashes, trailing commas). */
   function parsed(repair: boolean): unknown | undefined {
@@ -88,6 +95,20 @@ export function DocumentEditorPanel({
     }
   }
 
+  function replaceWith(text: string) {
+    onChange(text);
+    setResult(null);
+    setError(null);
+    setPending(null);
+    editor.current?.focus();
+  }
+
+  /** Loading the sample asks first only when it would replace the user's own text. */
+  function loadSample() {
+    if (!value.trim() || value === SAMPLE_DOCUMENT_TEXT) replaceWith(SAMPLE_DOCUMENT_TEXT);
+    else setPending("sample");
+  }
+
   function format() {
     const document = parsed(true);
     if (document !== undefined) onChange(JSON.stringify(document, null, 2));
@@ -95,15 +116,22 @@ export function DocumentEditorPanel({
 
   /** Selects the spot an issue points at, so it's easy to find in a long document. */
   function goTo(issue: DocIssue) {
-    const range = locatePointer(value, issue.path);
-    const textarea = editor.current;
-    if (!range || !textarea) return;
-    textarea.focus();
-    textarea.setSelectionRange(range.start, range.end);
-    // Scroll the selection into view: approximate by line number
-    const line = value.slice(0, range.start).split("\n").length;
-    const lineHeight = parseFloat(getComputedStyle(textarea).lineHeight) || 16;
-    textarea.scrollTop = Math.max(0, (line - 4) * lineHeight);
+    select(locatePointer(value, issue.path));
+  }
+
+  // Text selected in the preview: jump to where it's written
+  const [notFound, setNotFound] = useState<string | null>(null);
+  useEffect(() => {
+    if (!reveal) return;
+    const range = locateText(value, reveal.text, reveal.occurrence);
+    setNotFound(range ? null : reveal.text);
+    select(range);
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- only when a new selection arrives
+  }, [reveal?.id]);
+
+  /** Selects a range of the JSON and scrolls it into view. */
+  function select(range: { start: number; end: number } | null) {
+    if (range) editor.current?.select(range.start, range.end);
   }
 
   const errors = result ? result.errors : previewIssues;
@@ -111,19 +139,28 @@ export function DocumentEditorPanel({
 
   return (
     <Card className="gap-3 p-4">
-      <div className="flex flex-wrap items-start justify-between gap-2">
+      <div className="flex items-start justify-between gap-2">
         <div className="min-w-0 flex-1">
           <h2 className="text-base font-semibold">Document</h2>
           <p className="text-xs text-subtlest">
             Full control: any section, tag, class and style. The preview updates as you type.
           </p>
         </div>
-        <Button size="compact" variant="subtle" onClick={() => setRulesOpen(true)}>
-          <BookOpen /> Rules
-        </Button>
+        <div className="flex shrink-0 gap-1">
+          <Tooltip content="Replace the editor content with an example resume">
+            <Button size="compact" variant="subtle" onClick={loadSample} aria-label="Load sample">
+              <FileText /> <span className="@max-md:sr-only">Load sample</span>
+            </Button>
+          </Tooltip>
+          <Tooltip content="Every tag, style and limit a document may use">
+            <Button size="compact" variant="subtle" onClick={() => setRulesOpen(true)} aria-label="Rules">
+              <BookOpen /> <span className="@max-md:sr-only">Rules</span>
+            </Button>
+          </Tooltip>
+        </div>
       </div>
 
-      <div className="flex flex-wrap gap-2" role="toolbar" aria-label="Document tools">
+      <div className="flex flex-wrap items-center gap-2" role="toolbar" aria-label="Document tools">
         <Button size="compact" variant="primary" isLoading={checking === "strict"} disabled={!!checking || !value.trim()}
           onClick={() => check("strict")}>
           <ShieldCheck /> Check
@@ -135,30 +172,33 @@ export function DocumentEditorPanel({
         <Button size="compact" disabled={!value.trim()} onClick={format}>
           <AlignLeft /> Format
         </Button>
-        <Button size="compact" variant="subtle" className="ml-auto" onClick={onBackToForm}>
-          <LayoutList /> {backLabel}
-        </Button>
+        <FieldsMenu hint="Insert at the cursor (quoted when needed)" onPick={(placeholder) => editor.current?.insertJsonText(placeholder)} />
+        <Tooltip content="Empty the editor to paste your own document">
+          <Button size="compact" variant="subtle" className="ml-auto" disabled={!value.trim()} aria-label="Clear"
+            onClick={() => setPending("clear")}>
+            <Eraser /> <span className="@max-md:sr-only">Clear</span>
+          </Button>
+        </Tooltip>
       </div>
 
       {notice && <p className="rounded-sm bg-information px-3 py-2 text-sm text-information-text">{notice}</p>}
 
-      <label htmlFor="resume-document-editor" className="sr-only">Document JSON</label>
-      <Textarea
+      <CodeEditor
         ref={editor}
-        id="resume-document-editor"
-        rows={26}
-        className="min-h-80 font-mono text-xs leading-5"
-        spellCheck={false}
-        autoCapitalize="off"
-        autoCorrect="off"
+        aria-label="Document JSON"
+        aria-describedby="resume-document-status"
+        placeholder="Paste a document here, or press Load sample"
         value={value}
-        onChange={(e) => {
-          onChange(e.target.value);
+        invalid={!!parseError}
+        onChange={(text) => {
+          onChange(text);
           setResult(null);
         }}
-        aria-invalid={!!parseError}
-        aria-describedby="resume-document-status"
       />
+      <p className="-mt-1 text-xs text-subtlest">
+        Click the arrows next to the line numbers to collapse or expand. Ctrl/⌘+F finds and replaces, Ctrl/⌘+Z undoes,
+        Ctrl/⌘+[ and ] indent.
+      </p>
 
       <div id="resume-document-status" aria-live="polite" className="flex flex-col gap-2">
         {parseError && (
@@ -167,6 +207,12 @@ export function DocumentEditorPanel({
           </SectionMessage>
         )}
         {error && <SectionMessage appearance="error" title="Couldn't check the document">{error}</SectionMessage>}
+        {notFound && (
+          <p className="text-xs text-subtlest">
+            &ldquo;{notFound.length > 60 ? `${notFound.slice(0, 57)}…` : notFound}&rdquo; isn&apos;t written as is in the
+            document (it may come from a template or be split by formatting). Try selecting fewer words.
+          </p>
+        )}
         {result?.valid && (
           <SectionMessage appearance="success" title={result.document ? "Fixed and valid" : "Valid"}>
             {result.pages !== null && `${result.pages} ${result.pages === 1 ? "page" : "pages"}. `}
@@ -184,6 +230,17 @@ export function DocumentEditorPanel({
       </div>
 
       <RulesDialog open={rulesOpen} onOpenChange={setRulesOpen} document={value} />
+      <ConfirmDialog
+        open={pending !== null}
+        onOpenChange={(open) => !open && setPending(null)}
+        title={pending === "clear" ? "Clear the document?" : "Replace with the sample?"}
+        description={pending === "clear"
+          ? "The editor will be empty so you can paste your own document. Unsaved changes are lost."
+          : "The sample document replaces what's in the editor. Unsaved changes are lost."}
+        confirmLabel={pending === "clear" ? "Clear" : "Load sample"}
+        appearance={pending === "clear" ? "danger" : "primary"}
+        onConfirm={() => replaceWith(pending === "clear" ? "" : SAMPLE_DOCUMENT_TEXT)}
+      />
     </Card>
   );
 }

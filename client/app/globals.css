@@ -19,6 +19,8 @@
   --surface-pressed: #dddee1;
   --surface-sunken: #f8f8f8;
   --surface-raised: #ffffff;
+  /* Printed pages (PDF previews) stay white like paper in both themes */
+  --paper: #ffffff;
   --surface-raised-hovered: #f0f1f2;
   --surface-overlay: #ffffff;
   --shadow-raised: 0px 1px 1px #1e1f2140, 0px 0px 1px #1e1f214f;
@@ -105,6 +107,7 @@
   --surface-pressed: #2b2c2f;
   --surface-sunken: #18191a;
   --surface-raised: #242528;
+  --paper: #ffffff;
   --surface-raised-hovered: #2b2c2f;
   --surface-overlay: #2b2c2f;
   --shadow-raised: 0px 0px 0px 1px #00000000, 0px 1px 1px #01040480, 0px 0px 1px #01040480;
@@ -285,6 +288,7 @@
   --color-surface-pressed: var(--surface-pressed);
   --color-surface-sunken: var(--surface-sunken);
   --color-surface-raised: var(--surface-raised);
+  --color-paper: var(--paper);
   --color-surface-raised-hovered: var(--surface-raised-hovered);
   --color-surface-overlay: var(--surface-overlay);
 

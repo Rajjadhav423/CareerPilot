@@ -2,7 +2,7 @@ import type { Metadata, Viewport } from "next";
 import { Geist_Mono, Inter } from "next/font/google";
 import { ClerkProvider } from "@clerk/nextjs";
 
-import { clerkAppearance } from "@/lib/clerk-appearance";
+import { clerkAppearance, clerkLocalization } from "@/lib/clerk-appearance";
 import { ROUTES } from "@/lib/routes";
 import { SITE } from "@/lib/site";
 import { themeInitScript } from "@/lib/theme";
@@ -56,6 +56,7 @@ export default function RootLayout({ children }: LayoutProps<"/">) {
       <body className="flex min-h-full flex-col">
         <ClerkProvider
           appearance={clerkAppearance}
+          localization={clerkLocalization}
           signInUrl={ROUTES.signIn}
           signUpUrl={ROUTES.signUp}
           // Where to go after signing in/up when no specific page was requested

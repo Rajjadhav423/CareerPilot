@@ -1,22 +1,29 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
 import { useAuth } from "@clerk/nextjs";
 import { Braces, CloudUpload, Download, Eye, FileJson, History, LayoutList, MoreHorizontal, Pencil, Save, Upload } from "lucide-react";
 
 import { ApiError } from "@/lib/api/client";
 import { isDocDocument, type DocDocument, type DocIssue } from "@/lib/api/docs";
-import { convertResumeToDocument, type PageSize, type RenderInput, type Resume, type ResumeData } from "@/lib/api/resumes";
+import {
+  convertDocumentToForm,
+  convertResumeToDocument,
+  type PageSize,
+  type RenderInput,
+  type Resume,
+  type ResumeData,
+} from "@/lib/api/resumes";
 import { describeField, emptyResume, toApi, toEditable, type EditableResume } from "@/lib/resumes/editor";
 import { useDownloadResumePdf, useResume, useResumeTemplates, useResumeVersions, useSaveResume } from "@/lib/resumes/use-resumes";
+import { locateInFields } from "@/lib/docs/locate-text";
 import { starterDocument } from "@/lib/docs/starter";
 import { RESUME_VERSIONS_ENABLED } from "@/lib/resumes/features";
 import { resumePath } from "@/lib/routes";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
-import { ConfirmDialog } from "@/components/ui/confirm-dialog";
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -28,6 +35,7 @@ import { SectionMessage } from "@/components/ui/section-message";
 import { Select } from "@/components/ui/select";
 import { Spinner } from "@/components/ui/spinner";
 import { TextField } from "@/components/ui/text-field";
+import { FieldsMenu } from "@/components/settings/fields-menu";
 import { DocumentEditorPanel } from "./document-editor-panel";
 import { ImportJsonDialog } from "./import-json-dialog";
 import { ResumeForm } from "./resume-form";
@@ -35,8 +43,20 @@ import { ResumePreview } from "./resume-preview";
 import { SaveToDriveDialog } from "./save-to-drive-dialog";
 import { VersionHistoryDialog } from "./version-history-dialog";
 
-/** `document`: the docEngine document as JSON text (null = the resume uses the form). */
-type Draft = { title: string; templateId: string; pageSize: PageSize; resume: EditableResume; document: string | null };
+/**
+ * The resume being edited. The form and the document are two views of the same resume and are kept in sync:
+ * - `document`: the docEngine document as JSON text (null until the resume has one)
+ * - `source`: which side holds the latest edits. "form": the form was edited after the last sync, so the document is
+ *   rebuilt from the form (keeping its styles). "document": the document is up to date and is what gets printed.
+ */
+type Draft = {
+  title: string;
+  templateId: string;
+  pageSize: PageSize;
+  resume: EditableResume;
+  document: string | null;
+  source: "form" | "document";
+};
 
 type InputMode = "form" | "document";
 
@@ -61,7 +81,7 @@ export function ResumeEditor({ resumeId }: { resumeId: string | null }) {
 
   const initial: Draft = saved.data
     ? toDraft(saved.data)
-    : { title: "My resume", templateId: "classic", pageSize: "A4", resume: emptyResume(), document: null };
+    : { title: "My resume", templateId: "classic", pageSize: "A4", resume: emptyResume(), document: null, source: "form" };
 
   return <ResumeWorkspace key={resumeId ?? "new"} resumeId={resumeId} initial={initial} />;
 }
@@ -73,6 +93,7 @@ function toDraft(resume: Resume): Draft {
     pageSize: resume.pageSize,
     resume: toEditable(resume.data),
     document: resume.document ? JSON.stringify(resume.document, null, 2) : null,
+    source: resume.document ? "document" : "form",
   };
 }
 
@@ -103,44 +124,51 @@ function ResumeWorkspace({ resumeId, initial }: { resumeId: string | null; initi
   const [driveOpen, setDriveOpen] = useState(false);
   const [importOpen, setImportOpen] = useState(false);
   const [historyOpen, setHistoryOpen] = useState(false);
-  const [leaveDocumentOpen, setLeaveDocumentOpen] = useState(false);
-  const [converting, setConverting] = useState(false);
-  const [convertError, setConvertError] = useState<string | null>(null);
-  // The form shown as a document in the Document tab; the resume becomes a document only when it's edited
-  const [convertedText, setConvertedText] = useState<string | null>(null);
-  /** "form": the form converted; "starter": an example (empty or not-yet-valid form); "invalid-form": example, form needs fixes */
-  const [convertedFrom, setConvertedFrom] = useState<"form" | "starter" | "invalid-form">("form");
-  const [inputMode, setInputMode] = useState<InputMode>(initial.document !== null ? "document" : "form");
+  /** A tab switch is converting one side into the other */
+  const [syncing, setSyncing] = useState(false);
+  const [syncError, setSyncError] = useState<string | null>(null);
+  // An example shown in the Document tab while there's nothing to convert yet (new or unfinished form)
+  const [starterText, setStarterText] = useState<string | null>(null);
+  const [starterNotice, setStarterNotice] = useState<string>("");
+  const [inputMode, setInputMode] = useState<InputMode>(initial.source === "document" ? "document" : "form");
+  /** Text selected in the preview, for the Document tab to select in the JSON */
+  const [reveal, setReveal] = useState<{ text: string; occurrence: number; id: number } | null>(null);
+  const formArea = useRef<HTMLDivElement>(null);
+  /** A saved detail copied from the Form tab's Details menu, to paste into a field */
+  const [copiedField, setCopiedField] = useState<string | null>(null);
   const versions = useResumeVersions(resumeId, RESUME_VERSIONS_ENABLED);
   const pending = versions.data?.filter((v) => v.status === "PROPOSED").length ?? 0;
 
-  const documentMode = draft.document !== null;
   const parsed = useMemo(() => parseDocument(draft.document), [draft.document]);
+  const fromDocument = draft.source === "document" && draft.document !== null;
   const data: ResumeData = useMemo(() => toApi(draft.resume), [draft.resume]);
   const formInput: RenderInput = useMemo(
     () => ({ templateId: draft.templateId, pageSize: draft.pageSize, data }),
     [draft.templateId, draft.pageSize, data],
   );
+  // What gets printed: the document, or the form merged into the document (its styles kept) after form edits
   const renderInput: RenderInput = useMemo(
-    () => (documentMode && parsed.doc ? { ...formInput, document: parsed.doc } : formInput),
-    [documentMode, parsed.doc, formInput],
+    () => fromDocument
+      ? (parsed.doc ? { ...formInput, document: parsed.doc } : formInput)
+      : { ...formInput, baseDocument: parsed.doc },
+    [fromDocument, parsed.doc, formInput],
   );
-  const canRender = documentMode ? !!parsed.doc : data.basics.fullName.length > 0;
-  // While the Document tab shows the converted form or the starter (not edited yet), preview that document
-  const viewedDoc = useMemo(
-    () => (!documentMode && inputMode === "document" ? parseDocument(convertedText).doc : null),
-    [documentMode, inputMode, convertedText],
+  const canRender = fromDocument ? !!parsed.doc : data.basics.fullName.length > 0;
+  // While the Document tab shows the example (not edited yet), preview the example
+  const starterDoc = useMemo(
+    () => (draft.document === null && inputMode === "document" ? parseDocument(starterText).doc : null),
+    [draft.document, inputMode, starterText],
   );
   const previewInput: RenderInput = useMemo(
-    () => (viewedDoc ? { ...formInput, document: viewedDoc } : renderInput),
-    [viewedDoc, formInput, renderInput],
+    () => (starterDoc ? { ...formInput, document: starterDoc } : renderInput),
+    [starterDoc, formInput, renderInput],
   );
   const dirty = JSON.stringify(draft) !== savedSnapshot;
 
   const actionError = save.error ?? download.error;
-  const fieldErrors = !documentMode && actionError instanceof ApiError && Object.keys(actionError.fieldErrors).length > 0
+  const fieldErrors = !fromDocument && actionError instanceof ApiError && Object.keys(actionError.fieldErrors).length > 0
     ? actionError.fieldErrors
-    : documentMode ? {} : previewErrors;
+    : fromDocument ? {} : previewErrors;
   const issues = actionError instanceof ApiError && actionError.issues.length > 0 ? actionError.issues : documentIssues;
 
   // Warn before leaving with unsaved changes
@@ -155,12 +183,17 @@ function ResumeWorkspace({ resumeId, initial }: { resumeId: string | null; initi
     save.mutate(
       {
         id: resumeId,
-        input: { title: draft.title.trim() || "My resume", ...formInput, document: documentMode ? parsed.doc : null },
+        input: {
+          title: draft.title.trim() || "My resume",
+          ...formInput,
+          document: fromDocument ? parsed.doc : null,
+          baseDocument: fromDocument ? null : parsed.doc,
+        },
       },
       {
         onSuccess: (resume) => {
-          // The server returns the document normalized; show what was stored
-          const next = { ...draft, document: resume.document ? JSON.stringify(resume.document, null, 2) : null };
+          // The server returns the document it stored (normalized, or merged from the form)
+          const next: Draft = { ...draft, document: resume.document ? JSON.stringify(resume.document, null, 2) : null };
           setDraft(next);
           setSavedSnapshot(JSON.stringify(next));
           if (!resumeId) router.replace(resumePath(resume.id));
@@ -174,65 +207,121 @@ function ResumeWorkspace({ resumeId, initial }: { resumeId: string | null; initi
     const next = toDraft(resume);
     setDraft(next);
     setSavedSnapshot(JSON.stringify(next));
-    setInputMode(next.document !== null ? "document" : "form");
+    setInputMode(next.source === "document" ? "document" : "form");
     save.reset();
   }
 
-  /** Opens the Document tab; for a form resume, shows the form converted to a document (server, chosen template). */
-  async function openDocumentTab() {
-    setInputMode("document");
-    if (documentMode) return;
-    setConvertError(null);
-    // A new resume has nothing to convert yet: start from an example document
-    if (data.basics.fullName.trim() === "") {
-      setConvertedText(JSON.stringify(starterDocument(), null, 2));
-      setConvertedFrom("starter");
+  /** Form tab: when the document holds the latest edits, read its content into the form first. */
+  async function openFormTab() {
+    setInputMode("form");
+    setSyncError(null);
+    if (!fromDocument) return;
+    if (!parsed.doc) {
+      setSyncError("The document has JSON errors, so the form shows its last synced content. Fix the document to sync.");
       return;
     }
-    setConverting(true);
+    setSyncing(true);
     try {
-      const document = await convertResumeToDocument(formInput, await getToken());
-      setConvertedText(JSON.stringify(document, null, 2));
-      setConvertedFrom("form");
+      const form = await convertDocumentToForm(parsed.doc, await getToken());
+      // Both sides now match; the document stays what gets printed until the form is edited
+      setDraft((d) => ({ ...d, resume: toEditable(form.data), templateId: form.templateId, pageSize: form.pageSize }));
     } catch (e) {
-      if (e instanceof ApiError && e.status === 400) {
+      setSyncError(e instanceof ApiError
+        ? `${e.message} The form shows its last synced content.`
+        : "Couldn't read the document into the form.");
+    } finally {
+      setSyncing(false);
+    }
+  }
+
+  /** Document tab: when the form holds the latest edits, rebuild the document from it (keeping its styles). */
+  async function openDocumentTab() {
+    setInputMode("document");
+    setSyncError(null);
+    if (fromDocument) return;
+    // Nothing to convert yet: start from an example document
+    if (draft.document === null && data.basics.fullName.trim() === "") {
+      setStarterText(JSON.stringify(starterDocument(), null, 2));
+      setStarterNotice("Start from this example: replace the placeholder text or paste a whole document. The form fills in from it.");
+      return;
+    }
+    setSyncing(true);
+    try {
+      const document = await convertResumeToDocument({ ...formInput, baseDocument: parsed.doc }, await getToken());
+      setDraft((d) => ({ ...d, document: JSON.stringify(document, null, 2), source: "document" }));
+    } catch (e) {
+      if (e instanceof ApiError && e.status === 400 && draft.document === null) {
         // The form has fields the server rejects (e.g. an invalid email): still let them write a document
-        setConvertedText(JSON.stringify(starterDocument(), null, 2));
-        setConvertedFrom("invalid-form");
+        setStarterText(JSON.stringify(starterDocument(), null, 2));
+        setStarterNotice("Your form has fields that need fixing, so this starts from an example. Edit it or paste a whole document.");
       } else {
-        setConvertError(e instanceof ApiError ? e.message : "Unexpected error.");
+        setSyncError(e instanceof ApiError
+          ? `${e.message} Fix it in the form; the document shows its last synced content.`
+          : "Couldn't update the document from the form.");
       }
     } finally {
-      setConverting(false);
+      setSyncing(false);
+    }
+  }
+
+  /** Selecting text in the preview jumps to where it's written: the JSON, or the form field (like SyncTeX). */
+  function revealSource(text: string, occurrence: number) {
+    setMode("edit"); // phones show one side at a time
+    if (inputMode === "document") {
+      setReveal({ text, occurrence, id: Date.now() });
+      return;
+    }
+    const fields = Array.from(formArea.current?.querySelectorAll<HTMLInputElement | HTMLTextAreaElement>(
+      "textarea, input:not([type]), input[type=text], input[type=email], input[type=url], input[type=tel]",
+    ) ?? []);
+    const found = locateInFields(fields, text, occurrence);
+    if (!found) return;
+    found.field.scrollIntoView({ block: "center", behavior: "smooth" });
+    found.field.focus({ preventScroll: true });
+    try {
+      found.field.setSelectionRange(found.start, found.end);
+    } catch {
+      // Email inputs don't support selecting part of the value: focusing the field is enough
     }
   }
 
   function replaceWithDocument(document: DocDocument) {
-    setDraft((d) => ({ ...d, document: JSON.stringify(document, null, 2) }));
+    setDraft((d) => ({ ...d, document: JSON.stringify(document, null, 2), source: "document" }));
     setInputMode("document");
   }
 
-  /** Changes one part of the document (template/paper selects); needs the JSON to parse. */
-  function updateDocument(change: (doc: DocDocument) => DocDocument) {
-    if (!parsed.doc) return;
-    setDraft((d) => ({ ...d, document: JSON.stringify(change(parsed.doc as DocDocument), null, 2) }));
+  /** Template and paper size: the form's settings, and the document's when it's what gets printed. */
+  function changeSetting(change: { templateId?: string; pageSize?: PageSize }) {
+    setDraft((d) => {
+      const next = { ...d, ...change };
+      if (fromDocument && parsed.doc) {
+        const doc: DocDocument = {
+          ...parsed.doc,
+          ...(change.templateId !== undefined ? { preset: change.templateId } : {}),
+          ...(change.pageSize ? { page: { ...parsed.doc.page, size: change.pageSize } } : {}),
+        };
+        next.document = JSON.stringify(doc, null, 2);
+      }
+      return next;
+    });
   }
 
   function exportJson() {
-    const content = documentMode ? (parsed.doc ?? draft.document) : data;
+    const content = fromDocument ? (parsed.doc ?? draft.document) : data;
     const blob = new Blob([typeof content === "string" ? content : JSON.stringify(content, null, 2)], { type: "application/json" });
     const url = URL.createObjectURL(blob);
     const link = document.createElement("a");
     link.href = url;
-    link.download = `${(data.basics.fullName || "resume").replace(/[^\w -]+/g, "").trim() || "resume"}${documentMode ? "-document" : ""}.json`;
+    link.download = `${(data.basics.fullName || "resume").replace(/[^\w -]+/g, "").trim() || "resume"}${fromDocument ? "-document" : ""}.json`;
     link.click();
     setTimeout(() => URL.revokeObjectURL(url), 10_000);
   }
 
-  const fileName = (documentMode && parsed.doc?.meta?.title) || `${data.basics.fullName || "Resume"} - Resume`;
-  const templateValue = documentMode ? (parsed.doc?.preset ?? "") : draft.templateId;
-  const pageSizeValue = documentMode ? (parsed.doc?.page?.size?.toUpperCase() === "LETTER" ? "LETTER" : "A4") : draft.pageSize;
-  const selectsDisabled = documentMode && !parsed.doc;
+  const fileName = (fromDocument && parsed.doc?.meta?.title) || `${data.basics.fullName || "Resume"} - Resume`;
+  const templateValue = fromDocument && parsed.doc ? (parsed.doc.preset ?? draft.templateId) : draft.templateId;
+  const pageSizeValue = fromDocument && parsed.doc
+    ? (parsed.doc.page?.size?.toUpperCase() === "LETTER" ? "LETTER" : "A4")
+    : draft.pageSize;
 
   return (
     <div className="@container flex flex-col gap-4">
@@ -242,24 +331,19 @@ function ResumeWorkspace({ resumeId, initial }: { resumeId: string | null; initi
             <TextField id="resume-title" value={draft.title} maxLength={120}
               onChange={(e) => setDraft({ ...draft, title: e.target.value })} />
           </Field>
-          <Field htmlFor="resume-template" label={documentMode ? "Preset" : "Template"}
-            hint={documentMode ? "Starting styles; the document's own styles win"
+          <Field htmlFor="resume-template" label="Template"
+            hint={draft.document !== null ? "Starting styles; the document's own styles win"
               : templates.data?.find((t) => t.id === draft.templateId)?.description}>
-            <Select id="resume-template" value={templateValue} disabled={selectsDisabled}
-              onChange={(e) => documentMode
-                ? updateDocument((doc) => ({ ...doc, preset: e.target.value || undefined }))
-                : setDraft({ ...draft, templateId: e.target.value })}>
-              {documentMode && <option value="">None (document styles only)</option>}
+            <Select id="resume-template" value={templateValue} disabled={fromDocument && !parsed.doc}
+              onChange={(e) => changeSetting({ templateId: e.target.value })}>
               {(templates.data ?? [{ id: draft.templateId, name: draft.templateId, description: "" }]).map((t) => (
                 <option key={t.id} value={t.id}>{t.name}</option>
               ))}
             </Select>
           </Field>
           <Field htmlFor="resume-page-size" label="Paper size">
-            <Select id="resume-page-size" value={pageSizeValue} disabled={selectsDisabled}
-              onChange={(e) => documentMode
-                ? updateDocument((doc) => ({ ...doc, page: { ...doc.page, size: e.target.value as "A4" | "LETTER" } }))
-                : setDraft({ ...draft, pageSize: e.target.value as PageSize })}>
+            <Select id="resume-page-size" value={pageSizeValue} disabled={fromDocument && !parsed.doc}
+              onChange={(e) => changeSetting({ pageSize: e.target.value as PageSize })}>
               <option value="A4">A4</option>
               <option value="LETTER">US Letter</option>
             </Select>
@@ -293,7 +377,7 @@ function ResumeWorkspace({ resumeId, initial }: { resumeId: string | null; initi
                 <Upload /> Import (JSON / document)
               </DropdownMenuItem>
               <DropdownMenuItem onSelect={exportJson}>
-                <FileJson /> Export {documentMode ? "document" : "JSON"}
+                <FileJson /> Export {fromDocument ? "document" : "JSON"}
               </DropdownMenuItem>
             </DropdownMenuContent>
           </DropdownMenu>
@@ -330,59 +414,51 @@ function ResumeWorkspace({ resumeId, initial }: { resumeId: string | null; initi
       </div>
 
       <div className="grid gap-4 @5xl:grid-cols-2">
-        <div className={mode === "edit" ? "@container min-w-0" : "@container hidden min-w-0 @5xl:block"}>
-          <div className="mb-3 flex gap-1 overflow-x-auto" role="group" aria-label="Edit with">
-            <Button size="compact" variant="subtle" isSelected={inputMode === "form"} onClick={() => setInputMode("form")}>
+        <div ref={formArea} className={mode === "edit" ? "@container min-w-0" : "@container hidden min-w-0 @5xl:block"}>
+          <div className="mb-3 flex flex-wrap items-center gap-1" role="group" aria-label="Edit with">
+            <Button size="compact" variant="subtle" isSelected={inputMode === "form"} disabled={syncing} onClick={openFormTab}>
               <LayoutList /> Form
             </Button>
-            <Button size="compact" variant="subtle" isSelected={inputMode === "document"} onClick={openDocumentTab}>
+            <Button size="compact" variant="subtle" isSelected={inputMode === "document"} disabled={syncing} onClick={openDocumentTab}>
               <Braces /> Document
             </Button>
+            {syncing && <span className="ml-2 flex items-center gap-2 text-xs text-subtle"><Spinner size="sm" /> Syncing…</span>}
+            {!syncing && draft.document !== null && (
+              <span className="ml-2 hidden text-xs text-subtlest @lg:inline">Form and document stay in sync when you switch tabs</span>
+            )}
+            {inputMode === "form" && (
+              <span className="ml-auto flex items-center gap-2">
+                {copiedField && <span className="text-xs text-subtle" aria-live="polite">Copied {copiedField}: paste it in any field</span>}
+                <FieldsMenu hint="Copy, then paste into any field" onPick={(placeholder) => {
+                  navigator.clipboard.writeText(placeholder).then(() => setCopiedField(placeholder), () => setCopiedField(null));
+                }} />
+              </span>
+            )}
           </div>
 
-          {inputMode !== "document" && documentMode && (
-            <DocumentModeNotice onOpenDocument={() => setInputMode("document")} onUseForm={() => setLeaveDocumentOpen(true)} />
+          {syncError && (
+            <SectionMessage appearance="warning" title="Not synced" className="mb-3">{syncError}</SectionMessage>
           )}
-          {inputMode === "form" && !documentMode && (
+
+          {inputMode === "form" && !syncing && (
             <ResumeForm value={draft.resume} errors={fieldErrors}
-              onChange={(resume) => setDraft({ ...draft, resume })} />
+              onChange={(resume) => setDraft((d) => ({ ...d, resume, source: "form" }))} />
           )}
-          {inputMode === "document" && documentMode && (
-            <DocumentEditorPanel value={draft.document ?? ""} parseError={parsed.error} previewIssues={issues}
-              onChange={(text) => setDraft((d) => ({ ...d, document: text }))}
-              onBackToForm={() => setLeaveDocumentOpen(true)} />
+          {inputMode === "document" && !syncing && draft.document !== null && (
+            <DocumentEditorPanel value={draft.document} parseError={parsed.error} previewIssues={issues}
+              onChange={(text) => setDraft((d) => ({ ...d, document: text, source: "document" }))}
+              reveal={reveal} />
           )}
-          {inputMode === "document" && !documentMode && (
-            converting || convertedText === null ? (
-              <Card className="gap-3 p-4">
-                {convertError ? (
-                  <SectionMessage appearance="error" title="Couldn't load the document">
-                    {convertError}
-                    <div className="mt-3">
-                      <Button size="compact" onClick={openDocumentTab}>Try again</Button>
-                    </div>
-                  </SectionMessage>
-                ) : (
-                  <div className="flex items-center gap-2 py-6 text-subtle"><Spinner /> Loading the document…</div>
-                )}
-              </Card>
-            ) : (
-              <DocumentEditorPanel value={convertedText} parseError={null} previewIssues={[]}
-                notice={convertedFrom === "form"
-                  ? "This is your form as a document. Editing it makes the resume a document."
-                  : convertedFrom === "invalid-form"
-                    ? "Your form has fields that need fixing, so this starts from an example. Edit it or paste a whole document; editing makes the resume a document."
-                    : "Start from this example: replace the placeholder text or paste a whole document. Editing makes the resume a document."}
-                backLabel="Back to the form"
-                onChange={(text) => setDraft((d) => ({ ...d, document: text }))}
-                onBackToForm={() => setInputMode("form")} />
-            )
+          {inputMode === "document" && !syncing && draft.document === null && starterText !== null && (
+            <DocumentEditorPanel value={starterText} parseError={null} previewIssues={[]} notice={starterNotice}
+              reveal={reveal}
+              onChange={(text) => setDraft((d) => ({ ...d, document: text, source: "document" }))} />
           )}
         </div>
         <div className={mode === "preview" ? "min-w-0" : "hidden min-w-0 @5xl:block"}>
           <div className="@5xl:sticky @5xl:top-16">
-            <ResumePreview input={previewInput} ready={canRender || !!viewedDoc} onFieldErrors={setPreviewErrors}
-              onDocumentIssues={setDocumentIssues} />
+            <ResumePreview input={previewInput} ready={canRender || !!starterDoc} onFieldErrors={setPreviewErrors}
+              onDocumentIssues={setDocumentIssues} onTextSelect={revealSource} />
           </div>
         </div>
       </div>
@@ -391,7 +467,7 @@ function ResumeWorkspace({ resumeId, initial }: { resumeId: string | null; initi
         defaultFileName={fileName} />
       <ImportJsonDialog open={importOpen} onOpenChange={setImportOpen} resumeId={resumeId}
         onReplace={(imported) => {
-          setDraft((d) => ({ ...d, resume: toEditable(imported), document: null }));
+          setDraft((d) => ({ ...d, resume: toEditable(imported), source: "form" }));
           setInputMode("form");
         }}
         onReplaceDocument={replaceWithDocument}
@@ -400,36 +476,6 @@ function ResumeWorkspace({ resumeId, initial }: { resumeId: string | null; initi
         <VersionHistoryDialog open={historyOpen} onOpenChange={setHistoryOpen} resumeId={resumeId} dirty={dirty}
           onApplied={applySaved} />
       )}
-      <ConfirmDialog
-        open={leaveDocumentOpen}
-        onOpenChange={setLeaveDocumentOpen}
-        title="Use the form instead?"
-        description="The resume goes back to the form content and template. The document is removed when you save; saved versions stay in History."
-        confirmLabel="Use the form"
-        onConfirm={() => {
-          setDraft((d) => ({ ...d, document: null }));
-          setDocumentIssues([]);
-          setInputMode("form");
-          setLeaveDocumentOpen(false);
-        }}
-      />
     </div>
-  );
-}
-
-/** Shown in the Form tab while the resume is a document. */
-function DocumentModeNotice({ onOpenDocument, onUseForm }: { onOpenDocument: () => void; onUseForm: () => void }) {
-  return (
-    <SectionMessage appearance="information" title="This resume is a document">
-      <p>The form isn&apos;t used while the resume is a document. Edit it in the Document tab, or go back to the form.</p>
-      <div className="mt-3 flex flex-wrap gap-2">
-        <Button size="compact" variant="primary" onClick={onOpenDocument}>
-          <Braces /> Open the document
-        </Button>
-        <Button size="compact" onClick={onUseForm}>
-          <LayoutList /> Use the form instead
-        </Button>
-      </div>
-    </SectionMessage>
   );
 }
