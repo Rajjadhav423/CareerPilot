@@ -14,7 +14,7 @@ import { GMAIL_STATUS_KEY, useConnectGmail, useGmailStatus } from "@/lib/email/u
 import { useTemplates } from "@/lib/email/use-templates";
 import { formatRelativeTime } from "@/lib/format";
 import { JOB_STATUSES } from "@/lib/jobs/statuses";
-import { useResumes } from "@/lib/resumes/use-resumes";
+import { useDriveDocuments, useDriveStatus } from "@/lib/drive/use-drive";
 import { ROUTES } from "@/lib/routes";
 import { AddDetailDialog } from "@/components/settings/add-detail-dialog";
 import { FieldsMenu } from "@/components/settings/fields-menu";
@@ -35,6 +35,7 @@ import { SectionMessage } from "@/components/ui/section-message";
 import { Select } from "@/components/ui/select";
 import { Spinner } from "@/components/ui/spinner";
 import { TextField } from "@/components/ui/text-field";
+import { Toggle } from "@/components/ui/toggle";
 import { Textarea } from "@/components/ui/textarea";
 
 type ComposeEmailDialogProps = {
@@ -88,10 +89,8 @@ function Composer({ job, initialTo, onClose }: { job: Job; initialTo: string; on
   const [toTouched, setToTouched] = useState(false);
   const [reviewed, setReviewed] = useState(false);
   const [result, setResult] = useState<SendEmailResult | null>(null);
-  // A saved resume to attach as a PDF ("" = none)
-  const [resumeId, setResumeId] = useState("");
-  const resumes = useResumes();
-  const attached = resumes.data?.find((r) => r.id === resumeId) ?? null;
+  // Attach the resume chosen under "Resume link" (the same Drive PDF) to the email
+  const [attach, setAttach] = useState(true);
 
   const { mutate: runCompose } = compose;
 
@@ -125,6 +124,21 @@ function Composer({ job, initialTo, onClose }: { job: Job; initialTo: string; on
   /** The box last typed in: details are inserted there */
   const [target, setTarget] = useState<"subject" | "body">("body");
 
+  // Resume PDFs saved to Google Drive: picking one puts its link in the email
+  const drive = useDriveStatus();
+  const driveDocs = useDriveDocuments(!!drive.data?.connected);
+  const drivePdfs = (driveDocs.data ?? []).filter((d) => d.webViewLink && d.mimeType === "application/pdf");
+  /** The Drive PDF whose link is in the email: the one chosen under "Resume link" */
+  const linked = drivePdfs.find((d) => d.webViewLink && draft.body.includes(d.webViewLink)) ?? null;
+  const attached = attach ? linked : null;
+
+  /** Swaps the Drive file link already in the email for the chosen one, or inserts it at the cursor. */
+  function applyResumeLink(link: string) {
+    const existing = draft.body.match(DRIVE_FILE_LINK)?.[0];
+    if (existing) setDraft((current) => ({ ...current, body: current.body.replace(existing, link) }));
+    else insertDetail(link);
+  }
+
   /** Puts a saved detail's value where the cursor was (an email is sent as final text, so no {{placeholder}}). */
   function insertDetail(value: string) {
     const element = target === "subject" ? subjectRef.current : bodyRef.current;
@@ -151,7 +165,7 @@ function Composer({ job, initialTo, onClose }: { job: Job; initialTo: string; on
 
   function confirmAndSend() {
     send.mutate(
-      { to: recipient, subject: draft.subject.trim(), body: draft.body, templateId, resumeId: attached?.id ?? null, confirmed: true },
+      { to: recipient, subject: draft.subject.trim(), body: draft.body, templateId, driveDocumentId: attached?.id ?? null, confirmed: true },
       {
         onSuccess: (sentResult) => {
           setResult(sentResult);
@@ -221,7 +235,7 @@ function Composer({ job, initialTo, onClose }: { job: Job; initialTo: string; on
             {attached && (
               <div className="flex flex-col gap-0.5 border-b border-border px-3 py-2 sm:flex-row sm:gap-2">
                 <dt className="w-16 shrink-0 font-semibold text-subtle">Attached</dt>
-                <dd className="flex min-w-0 items-center gap-1.5 break-words"><Paperclip className="size-4 shrink-0" /> {attached.title} (PDF)</dd>
+                <dd className="flex min-w-0 items-center gap-1.5 break-words"><Paperclip className="size-4 shrink-0" /> {attached.name}</dd>
               </div>
             )}
             {/* Plain text rendered by React (escaped); the server escapes it again for the HTML version */}
@@ -411,16 +425,24 @@ function Composer({ job, initialTo, onClose }: { job: Job; initialTo: string; on
               />
             </Field>
 
-            <Field htmlFor="email-resume" label="Attach a resume"
-              hint={resumes.data?.length === 0
-                ? <>No saved resumes yet. <Link href={ROUTES.resumes} className="text-link hover:underline">Create one</Link> to attach it.</>
-                : "Sent as a PDF made from your saved resume, exactly as it looks in the editor."}>
-              <Select id="email-resume" value={resumeId} disabled={!resumes.data?.length}
-                onChange={(e) => setResumeId(e.target.value)}>
-                <option value="">{resumes.isPending ? "Loading…" : "No attachment"}</option>
-                {resumes.data?.map((r) => <option key={r.id} value={r.id}>{r.title}</option>)}
+            <Field htmlFor="email-resume-link" label="Resume"
+              hint={drivePdfs.length > 0
+                ? "Its Google Drive link replaces the one in the email (or is added at the cursor). Anyone with the link can view it."
+                : drive.data?.connected
+                  ? "No resumes in Google Drive yet. Use Save to Drive in the resume editor."
+                  : "Connect Google Drive and save resumes there to pick them here."}>
+              <Select id="email-resume-link" value={linked?.id ?? ""} disabled={drivePdfs.length === 0}
+                onChange={(e) => {
+                  const doc = drivePdfs.find((d) => d.id === e.target.value);
+                  if (doc?.webViewLink) applyResumeLink(doc.webViewLink);
+                }}>
+                <option value="">{driveDocs.isPending && drive.data?.connected ? "Loading…" : "Choose a resume…"}</option>
+                {drivePdfs.map((d) => <option key={d.id} value={d.id}>{d.name}</option>)}
               </Select>
             </Field>
+
+            <Toggle id="email-attach" checked={attach} onCheckedChange={setAttach} disabled={!linked}
+              label={linked ? <>Also attach <span className="font-semibold">{linked.name}</span> to the email</> : "Attach the resume (choose one above)"} />
           </>
         )}
       </DialogBody>
@@ -474,3 +496,6 @@ function GmailNotice({
     </SectionMessage>
   );
 }
+
+/** A Google Drive file link, e.g. https://drive.google.com/file/d/<id>/view?usp=sharing */
+const DRIVE_FILE_LINK = /https:\/\/drive\.google\.com\/file\/d\/[A-Za-z0-9_-]+[^\s]*/;

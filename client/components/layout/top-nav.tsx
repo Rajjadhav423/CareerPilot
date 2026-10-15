@@ -7,7 +7,6 @@ import { CreateMenu } from "./create-menu";
 import { GlobalSearch } from "./global-search";
 import { SidebarToggle } from "./sidebar-toggle";
 import { ThemeMenu } from "./theme-menu";
-import { UserMenu } from "./user-menu";
 
 export function TopNav() {
   return (
@@ -30,10 +29,6 @@ export function TopNav() {
 
       <div className="flex shrink-0 items-center gap-1.5 md:min-w-16 md:justify-end">
         <ThemeMenu />
-        {/* Clerk's account menu: profile, security, sign out */}
-        <div className="flex size-8 items-center justify-center pointer-coarse:size-10">
-          <UserMenu />
-        </div>
       </div>
     </header>
   );
