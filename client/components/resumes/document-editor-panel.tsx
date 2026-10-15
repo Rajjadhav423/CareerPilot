@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { useAuth } from "@clerk/nextjs";
 import { AlignLeft, BookOpen, Check, Copy, Download, Eraser, FileText, ShieldCheck, Wand2 } from "lucide-react";
 
@@ -40,6 +40,11 @@ type DocumentEditorPanelProps = {
   previewIssues: DocIssue[];
   /** Shown above the editor, e.g. that editing turns the resume into a document. */
   notice?: string;
+  /**
+   * Resume form JSON pasted here by mistake ("basics" + "sections", schema version 2): converts it into a document.
+   * Without it, such JSON is only reported.
+   */
+  onImportForm?: (json: unknown) => Promise<void>;
   /** Text selected in the preview: select where it's written in the JSON (a new `id` asks again). */
   reveal?: { text: string; occurrence: number; id: number } | null;
 };
@@ -49,7 +54,7 @@ type DocumentEditorPanelProps = {
  * The preview follows every valid change; Check runs the strict rules, Auto-fix repairs what it can.
  */
 export function DocumentEditorPanel({
-  value, onChange, parseError, previewIssues, notice, reveal,
+  value, onChange, parseError, previewIssues, notice, reveal, onImportForm,
 }: DocumentEditorPanelProps) {
   const { getToken } = useAuth();
   const editor = useRef<CodeEditorHandle>(null);
@@ -57,6 +62,31 @@ export function DocumentEditorPanel({
   const [result, setResult] = useState<DocValidation | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [rulesOpen, setRulesOpen] = useState(false);
+  const [converting, setConverting] = useState(false);
+  // Form JSON (what Import JSON takes) isn't a document; spot it so it can be converted instead of "auto-fixed" away
+  const formJson = useMemo(() => {
+    try {
+      const json: unknown = JSON.parse(value);
+      // Form JSON has "basics" (documents never do), whatever schemaVersion it claims; convert it as version 2
+      return json && typeof json === "object" && !Array.isArray(json) && "basics" in json
+        ? { ...json, schemaVersion: 2 } : null;
+    } catch {
+      return null;
+    }
+  }, [value]);
+
+  async function convertForm() {
+    if (!formJson || !onImportForm) return;
+    setConverting(true);
+    setError(null);
+    try {
+      await onImportForm(formJson);
+    } catch (e) {
+      setError(e instanceof ApiError ? e.message : "Couldn't convert the resume JSON.");
+    } finally {
+      setConverting(false);
+    }
+  }
   /** Which replacement is waiting for confirmation */
   const [pending, setPending] = useState<"sample" | "clear" | null>(null);
 
@@ -201,7 +231,20 @@ export function DocumentEditorPanel({
       </p>
 
       <div id="resume-document-status" aria-live="polite" className="flex flex-col gap-2">
-        {parseError && (
+        {formJson && (
+          <SectionMessage appearance="information" title="This is resume form JSON, not a document">
+            It has &ldquo;basics&rdquo; and form sections, which is the format Import JSON takes. Convert it and the form
+            and this document are both filled in.
+            {onImportForm && (
+              <div className="mt-2">
+                <Button size="compact" variant="primary" isLoading={converting} onClick={() => void convertForm()}>
+                  Convert to a document
+                </Button>
+              </div>
+            )}
+          </SectionMessage>
+        )}
+        {parseError && !formJson && (
           <SectionMessage appearance="error" title="Invalid JSON">
             {parseError} If you pasted it from a chat, press Auto-fix to repair common copy-paste problems.
           </SectionMessage>
@@ -251,9 +294,27 @@ function IssueList({ title, issues, appearance, onSelect }: {
   appearance: "removed" | "moved";
   onSelect?: (issue: DocIssue) => void;
 }) {
+  const [copied, setCopied] = useState(false);
+
+  async function copyAll() {
+    const text = [title, ...issues.map((issue) => `- [${issue.code}] ${issue.path || "/"}: ${issue.message}`)].join("\n");
+    try {
+      await navigator.clipboard.writeText(text);
+      setCopied(true);
+      setTimeout(() => setCopied(false), 1500);
+    } catch {
+      // Clipboard blocked: the list stays visible to copy by hand
+    }
+  }
+
   return (
     <section className="flex flex-col gap-1.5" aria-label={title}>
-      <h3 className="text-xs font-semibold text-subtle">{title}</h3>
+      <div className="flex items-center justify-between gap-2">
+        <h3 className="text-xs font-semibold text-subtle">{title}</h3>
+        <Button size="compact" variant="subtle" onClick={copyAll} aria-label={`Copy ${title}`}>
+          {copied ? <Check /> : <Copy />} {copied ? "Copied" : "Copy all"}
+        </Button>
+      </div>
       <ul className="flex max-h-72 flex-col divide-y divide-border overflow-y-auto overscroll-contain rounded-sm border border-border">
         {issues.slice(0, 100).map((issue, i) => (
           <li key={`${issue.path}-${issue.code}-${i}`}>

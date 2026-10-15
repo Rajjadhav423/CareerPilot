@@ -21,6 +21,8 @@ export type SendEmailInput = {
   subject: string;
   body: string;
   templateId: string | null;
+  /** One of the user's saved resumes, rendered and attached as a PDF by the server */
+  resumeId?: string | null;
   /** The user reviewed the email and pressed the final Send. The server refuses without it. */
   confirmed: boolean;
 };

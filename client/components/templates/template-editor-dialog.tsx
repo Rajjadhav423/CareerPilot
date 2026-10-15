@@ -6,7 +6,11 @@ import { Eye, Pencil } from "lucide-react";
 import { ApiError } from "@/lib/api/client";
 import type { EmailTemplate, MergeField } from "@/lib/api/templates";
 import { findUnknownPlaceholders, insertAtCursor } from "@/lib/email/placeholders";
+import { placeholderOf } from "@/lib/api/fields";
+import { STARTER_TEMPLATES } from "@/lib/email/starter-templates";
 import { useMergeFields, usePreviewTemplate, useSaveTemplate } from "@/lib/email/use-templates";
+import { useUserFields } from "@/lib/settings/use-user-fields";
+import { AddDetailDialog } from "@/components/settings/add-detail-dialog";
 import { Button } from "@/components/ui/button";
 import { Checkbox } from "@/components/ui/checkbox";
 import {
@@ -20,6 +24,7 @@ import {
   DialogTitle,
 } from "@/components/ui/dialog";
 import { Field } from "@/components/ui/field";
+import { Select } from "@/components/ui/select";
 import { SectionMessage } from "@/components/ui/section-message";
 import { Spinner } from "@/components/ui/spinner";
 import { TextField } from "@/components/ui/text-field";
@@ -71,10 +76,19 @@ function TemplateForm({ template, onDone }: { template?: EmailTemplate | null; o
   const bodyRef = useRef<HTMLTextAreaElement>(null);
 
   const mergeFields = useMergeFields();
+  const userFields = useUserFields();
   const save = useSaveTemplate();
   const preview = usePreviewTemplate();
+  const [addDetailOpen, setAddDetailOpen] = useState(false);
 
-  const allowedKeys = useMemo(() => new Set((mergeFields.data ?? []).map((f) => f.key)), [mergeFields.data]);
+  // Saved details (Settings) are fields too: {{github}}, {{resume_url}} …
+  const details: MergeField[] = useMemo(() => (userFields.data ?? []).map((f) => ({
+    key: f.key, placeholder: placeholderOf(f.key), label: f.label, description: f.value, sample: f.value,
+  })), [userFields.data]);
+  const allowedKeys = useMemo(
+    () => new Set([...(mergeFields.data ?? []).map((f) => f.key), ...details.map((f) => f.key)]),
+    [mergeFields.data, details],
+  );
   const unknown = mergeFields.data
     ? findUnknownPlaceholders(`${form.subject}\n${form.body}`, allowedKeys)
     : [];
@@ -162,12 +176,29 @@ function TemplateForm({ template, onDone }: { template?: EmailTemplate | null; o
 
         {unknown.length > 0 && (
           <SectionMessage appearance="warning" title="Unsupported placeholders">
-            Remove or fix {unknown.map((u) => `"${u}"`).join(", ")}. Only the fields in the Insert field menu can be used.
+            Remove or fix {unknown.map((u) => `"${u}"`).join(", ")}. Use a field from the Insert field menu, or add it
+            as one of your details.
+            <div className="mt-2">
+              <Button size="compact" type="button" onClick={() => setAddDetailOpen(true)}>Add a detail</Button>
+            </div>
           </SectionMessage>
         )}
 
         {mode === "edit" ? (
           <>
+            {!template && (
+              <Field htmlFor="template-starter" label="Start from"
+                hint="A professional starting point; edit anything before saving.">
+                <Select id="template-starter" defaultValue=""
+                  onChange={(e) => {
+                    const starter = STARTER_TEMPLATES.find((t) => t.id === e.target.value);
+                    if (starter) setForm((f) => ({ ...f, name: starter.name, subject: starter.subject, body: starter.body }));
+                  }}>
+                  <option value="">Blank template</option>
+                  {STARTER_TEMPLATES.map((t) => <option key={t.id} value={t.id}>{t.name}: {t.description}</option>)}
+                </Select>
+              </Field>
+            )}
             <Field htmlFor="template-name" label="Template name" required error={errors.name}>
               <TextField
                 id="template-name"
@@ -188,8 +219,10 @@ function TemplateForm({ template, onDone }: { template?: EmailTemplate | null; o
                 </label>
                 <MergeFieldMenu
                   fields={mergeFields.data ?? []}
+                  details={details}
                   target={target}
                   onInsert={insertField}
+                  onAddDetail={() => setAddDetailOpen(true)}
                   disabled={!mergeFields.data}
                 />
               </div>
@@ -255,6 +288,9 @@ function TemplateForm({ template, onDone }: { template?: EmailTemplate | null; o
           {template ? "Save changes" : "Create template"}
         </Button>
       </DialogFooter>
+      <AddDetailDialog open={addDetailOpen} onOpenChange={setAddDetailOpen}
+        onAdded={(field) => insertField({ key: field.key, placeholder: placeholderOf(field.key), label: field.label,
+          description: field.value, sample: field.value })} />
     </form>
   );
 }

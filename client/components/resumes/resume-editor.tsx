@@ -10,6 +10,7 @@ import { isDocDocument, type DocDocument, type DocIssue } from "@/lib/api/docs";
 import {
   convertDocumentToForm,
   convertResumeToDocument,
+  normalizeResumeJson,
   type PageSize,
   type RenderInput,
   type Resume,
@@ -166,7 +167,8 @@ function ResumeWorkspace({ resumeId, initial }: { resumeId: string | null; initi
   const dirty = JSON.stringify(draft) !== savedSnapshot;
 
   const actionError = save.error ?? download.error;
-  const fieldErrors = !fromDocument && actionError instanceof ApiError && Object.keys(actionError.fieldErrors).length > 0
+  // Shown in both tabs: a failed save must always say which field was rejected
+  const fieldErrors = actionError instanceof ApiError && Object.keys(actionError.fieldErrors).length > 0
     ? actionError.fieldErrors
     : fromDocument ? {} : previewErrors;
   const issues = actionError instanceof ApiError && actionError.issues.length > 0 ? actionError.issues : documentIssues;
@@ -283,6 +285,15 @@ function ResumeWorkspace({ resumeId, initial }: { resumeId: string | null; initi
     } catch {
       // Email inputs don't support selecting part of the value: focusing the field is enough
     }
+  }
+
+  /** Resume form JSON pasted into the Document tab: fill the form with it, then show it as a document. */
+  async function importFormJson(json: unknown) {
+    const token = await getToken();
+    const data = await normalizeResumeJson(json, token);
+    const document = await convertResumeToDocument({ templateId: draft.templateId, pageSize: draft.pageSize, data }, token);
+    setDraft((d) => ({ ...d, resume: toEditable(data), document: JSON.stringify(document, null, 2), source: "document" }));
+    setSyncError(null);
   }
 
   function replaceWithDocument(document: DocDocument) {
@@ -447,11 +458,11 @@ function ResumeWorkspace({ resumeId, initial }: { resumeId: string | null; initi
           {inputMode === "document" && !syncing && draft.document !== null && (
             <DocumentEditorPanel value={draft.document} parseError={parsed.error} previewIssues={issues}
               onChange={(text) => setDraft((d) => ({ ...d, document: text, source: "document" }))}
-              reveal={reveal} />
+              reveal={reveal} onImportForm={importFormJson} />
           )}
           {inputMode === "document" && !syncing && draft.document === null && starterText !== null && (
             <DocumentEditorPanel value={starterText} parseError={null} previewIssues={[]} notice={starterNotice}
-              reveal={reveal}
+              reveal={reveal} onImportForm={importFormJson}
               onChange={(text) => setDraft((d) => ({ ...d, document: text, source: "document" }))} />
           )}
         </div>

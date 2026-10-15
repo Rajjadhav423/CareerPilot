@@ -3,18 +3,21 @@
 import { useEffect, useRef, useState } from "react";
 import Link from "next/link";
 import { useQueryClient } from "@tanstack/react-query";
-import { ArrowLeft, Send } from "lucide-react";
+import { ArrowLeft, Paperclip, Send } from "lucide-react";
 
 import type { ComposedEmail, SendEmailResult } from "@/lib/api/application-emails";
 import { ApiError } from "@/lib/api/client";
 import type { Job } from "@/lib/api/jobs";
-import { findPlaceholders, isValidEmailAddress } from "@/lib/email/placeholders";
+import { findPlaceholders, insertAtCursor, isValidEmailAddress } from "@/lib/email/placeholders";
 import { useComposeEmail, useSendEmail, useSentEmails } from "@/lib/email/use-application-emails";
 import { GMAIL_STATUS_KEY, useConnectGmail, useGmailStatus } from "@/lib/email/use-gmail";
 import { useTemplates } from "@/lib/email/use-templates";
 import { formatRelativeTime } from "@/lib/format";
 import { JOB_STATUSES } from "@/lib/jobs/statuses";
+import { useResumes } from "@/lib/resumes/use-resumes";
 import { ROUTES } from "@/lib/routes";
+import { AddDetailDialog } from "@/components/settings/add-detail-dialog";
+import { FieldsMenu } from "@/components/settings/fields-menu";
 import { Button } from "@/components/ui/button";
 import { Checkbox } from "@/components/ui/checkbox";
 import {
@@ -85,6 +88,10 @@ function Composer({ job, initialTo, onClose }: { job: Job; initialTo: string; on
   const [toTouched, setToTouched] = useState(false);
   const [reviewed, setReviewed] = useState(false);
   const [result, setResult] = useState<SendEmailResult | null>(null);
+  // A saved resume to attach as a PDF ("" = none)
+  const [resumeId, setResumeId] = useState("");
+  const resumes = useResumes();
+  const attached = resumes.data?.find((r) => r.id === resumeId) ?? null;
 
   const { mutate: runCompose } = compose;
 
@@ -109,6 +116,27 @@ function Composer({ job, initialTo, onClose }: { job: Job; initialTo: string; on
     // eslint-disable-next-line react-hooks/exhaustive-deps -- once, when the dialog opens
   }, []);
 
+  /** A missing field being saved as a detail (Settings), e.g. "resume_url" */
+  const [detailKey, setDetailKey] = useState<string | null>(null);
+  /** "Add a detail" from the Insert detail menu: its value goes in at the cursor */
+  const [addingDetail, setAddingDetail] = useState(false);
+  const subjectRef = useRef<HTMLInputElement>(null);
+  const bodyRef = useRef<HTMLTextAreaElement>(null);
+  /** The box last typed in: details are inserted there */
+  const [target, setTarget] = useState<"subject" | "body">("body");
+
+  /** Puts a saved detail's value where the cursor was (an email is sent as final text, so no {{placeholder}}). */
+  function insertDetail(value: string) {
+    const element = target === "subject" ? subjectRef.current : bodyRef.current;
+    const selection = element ? { start: element.selectionStart ?? 0, end: element.selectionEnd ?? 0 } : null;
+    const result = insertAtCursor(draft[target], value, selection);
+    setDraft((current) => ({ ...current, [target]: result.value }));
+    requestAnimationFrame(() => {
+      element?.focus();
+      element?.setSelectionRange(result.cursor, result.cursor);
+    });
+  }
+
   const recipient = draft.to.trim();
   const recipientValid = isValidEmailAddress(recipient);
   const remaining = findPlaceholders(`${draft.subject}\n${draft.body}`);
@@ -123,7 +151,7 @@ function Composer({ job, initialTo, onClose }: { job: Job; initialTo: string; on
 
   function confirmAndSend() {
     send.mutate(
-      { to: recipient, subject: draft.subject.trim(), body: draft.body, templateId, confirmed: true },
+      { to: recipient, subject: draft.subject.trim(), body: draft.body, templateId, resumeId: attached?.id ?? null, confirmed: true },
       {
         onSuccess: (sentResult) => {
           setResult(sentResult);
@@ -190,6 +218,12 @@ function Composer({ job, initialTo, onClose }: { job: Job; initialTo: string; on
               <dt className="w-16 shrink-0 font-semibold text-subtle">Subject</dt>
               <dd className="break-words">{draft.subject.trim()}</dd>
             </div>
+            {attached && (
+              <div className="flex flex-col gap-0.5 border-b border-border px-3 py-2 sm:flex-row sm:gap-2">
+                <dt className="w-16 shrink-0 font-semibold text-subtle">Attached</dt>
+                <dd className="flex min-w-0 items-center gap-1.5 break-words"><Paperclip className="size-4 shrink-0" /> {attached.title} (PDF)</dd>
+              </div>
+            )}
             {/* Plain text rendered by React (escaped); the server escapes it again for the HTML version */}
             <dd className="max-h-72 overflow-y-auto px-3 py-3 break-words whitespace-pre-wrap">{draft.body}</dd>
           </dl>
@@ -298,11 +332,19 @@ function Composer({ job, initialTo, onClose }: { job: Job; initialTo: string; on
           <>
             {remaining.length > 0 && (
               <SectionMessage appearance="warning" title="Fill in the blanks before sending">
+                <AddDetailDialog open={detailKey !== null} onOpenChange={(open) => !open && setDetailKey(null)}
+                  initialKey={detailKey ?? undefined}
+                  onAdded={(field) => {
+                    // Fill it into this email straight away; later emails get it from the saved detail
+                    const fill = (text: string) => text.split(`{{${field.key}}}`).join(field.value);
+                    setDraft((current) => ({ ...current, subject: fill(current.subject), body: fill(current.body) }));
+                  }} />
                 <ul className="flex list-disc flex-col gap-0.5 pl-4">
                   {missingStill.map((field) => (
                     <li key={field.key}>
-                      No {field.label.toLowerCase()} available: replace <code className="font-mono">{field.placeholder}</code>{" "}
-                      with your own text, or remove it.
+                      No {field.label.toLowerCase()} yet: <Button type="button" size="compact" variant="link" className="h-auto px-0"
+                        onClick={() => setDetailKey(field.key)}>add it once</Button>{" "}
+                      (saved for every email), or replace <code className="font-mono">{field.placeholder}</code> with your own text.
                     </li>
                   ))}
                   {otherStill.map((placeholder) => (
@@ -336,9 +378,20 @@ function Composer({ job, initialTo, onClose }: { job: Job; initialTo: string; on
               />
             </Field>
 
+            <div className="-mb-2 flex items-center justify-end gap-2">
+              <span className="text-xs text-subtlest">GitHub, LinkedIn, portfolio…</span>
+              <FieldsMenu hint={`Insert into the ${target}`} keepFocus
+                onPick={(_placeholder, field) => insertDetail(field.value)}
+                onAddDetail={() => setAddingDetail(true)} />
+              <AddDetailDialog open={addingDetail} onOpenChange={setAddingDetail}
+                onAdded={(field) => insertDetail(field.value)} />
+            </div>
+
             <Field htmlFor="email-subject" label="Subject" required>
               <TextField
                 id="email-subject"
+                ref={subjectRef}
+                onFocus={() => setTarget("subject")}
                 value={draft.subject}
                 onChange={(e) => update("subject", e.target.value.replace(/[\r\n]+/g, " "))}
                 maxLength={255}
@@ -348,12 +401,25 @@ function Composer({ job, initialTo, onClose }: { job: Job; initialTo: string; on
             <Field htmlFor="email-body" label="Email" required hint="Changes here apply to this email only, not the template.">
               <Textarea
                 id="email-body"
+                ref={bodyRef}
+                onFocus={() => setTarget("body")}
                 rows={12}
                 className="min-h-56"
                 value={draft.body}
                 onChange={(e) => update("body", e.target.value)}
                 maxLength={20000}
               />
+            </Field>
+
+            <Field htmlFor="email-resume" label="Attach a resume"
+              hint={resumes.data?.length === 0
+                ? <>No saved resumes yet. <Link href={ROUTES.resumes} className="text-link hover:underline">Create one</Link> to attach it.</>
+                : "Sent as a PDF made from your saved resume, exactly as it looks in the editor."}>
+              <Select id="email-resume" value={resumeId} disabled={!resumes.data?.length}
+                onChange={(e) => setResumeId(e.target.value)}>
+                <option value="">{resumes.isPending ? "Loading…" : "No attachment"}</option>
+                {resumes.data?.map((r) => <option key={r.id} value={r.id}>{r.title}</option>)}
+              </Select>
             </Field>
           </>
         )}

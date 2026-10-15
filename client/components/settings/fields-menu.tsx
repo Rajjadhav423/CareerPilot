@@ -1,9 +1,9 @@
 "use client";
 
 import Link from "next/link";
-import { Braces, Settings } from "lucide-react";
+import { Braces, Plus, Settings } from "lucide-react";
 
-import { placeholderOf } from "@/lib/api/fields";
+import { placeholderOf, type UserField } from "@/lib/api/fields";
 import { ROUTES } from "@/lib/routes";
 import { useUserFields } from "@/lib/settings/use-user-fields";
 import { Button } from "@/components/ui/button";
@@ -18,14 +18,18 @@ import {
 import { Tooltip } from "@/components/ui/tooltip";
 
 type FieldsMenuProps = {
-  /** Called with the placeholder, e.g. "{{github}}" */
-  onPick: (placeholder: string) => void;
+  /** Called with the placeholder, e.g. "{{github}}", and the detail itself (for inserting its value) */
+  onPick: (placeholder: string, field: UserField) => void;
   /** Explains what picking does, e.g. "Inserted at the cursor" */
   hint: string;
+  /** Opens "Add a detail" from the menu */
+  onAddDetail?: () => void;
+  /** Keeps focus where it was after picking (the caller puts the cursor back itself) */
+  keepFocus?: boolean;
 };
 
 /** The user's saved details (Settings), to drop into a resume as {{key}}. */
-export function FieldsMenu({ onPick, hint }: FieldsMenuProps) {
+export function FieldsMenu({ onPick, hint, onAddDetail, keepFocus }: FieldsMenuProps) {
   const fields = useUserFields();
 
   return (
@@ -37,11 +41,12 @@ export function FieldsMenu({ onPick, hint }: FieldsMenuProps) {
           </Button>
         </DropdownMenuTrigger>
       </Tooltip>
-      <DropdownMenuContent className="w-72" align="end">
+      <DropdownMenuContent className="max-h-96 w-72 overflow-y-auto" align="end"
+        onCloseAutoFocus={(event) => keepFocus && event.preventDefault()}>
         <DropdownMenuLabel>{hint}</DropdownMenuLabel>
         {fields.data?.length ? (
           fields.data.map((field) => (
-            <DropdownMenuItem key={field.key} onSelect={() => onPick(placeholderOf(field.key))}>
+            <DropdownMenuItem key={field.key} onSelect={() => onPick(placeholderOf(field.key), field)}>
               <span className="flex min-w-0 flex-1 flex-col">
                 <span className="flex items-center justify-between gap-2">
                   <span className="truncate">{field.label}</span>
@@ -57,6 +62,11 @@ export function FieldsMenu({ onPick, hint }: FieldsMenuProps) {
           </p>
         )}
         <DropdownMenuSeparator />
+        {onAddDetail && (
+          <DropdownMenuItem onSelect={onAddDetail}>
+            <Plus /> Add a detail
+          </DropdownMenuItem>
+        )}
         <DropdownMenuItem asChild>
           <Link href={ROUTES.settings}>
             <Settings /> Manage details

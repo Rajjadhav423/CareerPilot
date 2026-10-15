@@ -1,8 +1,8 @@
 import { apiFetch } from "@/lib/api/client";
 
 /**
- * A reusable detail (GitHub, LinkedIn, LeetCode, portfolio …) saved once in Settings and written as {{key}} in any
- * resume field or document. The server fills it in when a preview or PDF is made.
+ * A reusable detail (GitHub, LinkedIn, LeetCode, resume link …) saved once in Settings and written as {{key}} in any
+ * resume field, document or email template. The server fills it in when a preview, PDF or email is made.
  */
 export type UserField = { key: string; label: string; value: string };
 
@@ -27,6 +27,7 @@ export function keyFromLabel(label: string): string {
 
 /** Common details offered as one-click additions in Settings. */
 export const SUGGESTED_FIELDS: { key: string; label: string; example: string }[] = [
+  { key: "resume_url", label: "Resume link", example: "https://drive.google.com/file/d/…/view" },
   { key: "github", label: "GitHub", example: "https://github.com/your-username" },
   { key: "linkedin", label: "LinkedIn", example: "https://linkedin.com/in/your-name" },
   { key: "leetcode", label: "LeetCode", example: "https://leetcode.com/u/your-username" },

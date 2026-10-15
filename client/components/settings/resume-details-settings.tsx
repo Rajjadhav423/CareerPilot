@@ -50,11 +50,11 @@ export function ResumeDetailsSettings() {
     <Card className="gap-4 p-4 @md:p-5">
       <CardHeader className="p-0">
         <div className="min-w-0">
-          <CardTitle>Resume details</CardTitle>
+          <CardTitle>Your details</CardTitle>
           <CardDescription className="mt-1">
             Save links and details once, then write them as <code className="rounded-xs bg-neutral px-1 font-mono text-xs">{"{{github}}"}</code> in
-            any resume field or document. They&apos;re filled in when the preview or PDF is made, so changing one here
-            updates every resume.
+            any resume, document or email template. They&apos;re filled in when a preview, PDF or email is made, so
+            changing one here updates everything that uses it.
           </CardDescription>
         </div>
       </CardHeader>

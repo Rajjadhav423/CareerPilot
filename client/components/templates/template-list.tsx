@@ -1,10 +1,11 @@
 "use client";
 
 import { useState } from "react";
-import { Copy, FileText, MoreHorizontal, Pencil, Plus, Star, Trash2 } from "lucide-react";
+import { Copy, FileText, MoreHorizontal, Pencil, Plus, Sparkles, Star, Trash2 } from "lucide-react";
 
 import { ApiError } from "@/lib/api/client";
 import type { EmailTemplate } from "@/lib/api/templates";
+import { STARTER_TEMPLATES } from "@/lib/email/starter-templates";
 import { formatRelativeTime } from "@/lib/format";
 import { useDeleteTemplate, useDuplicateTemplate, useSaveTemplate, useTemplates } from "@/lib/email/use-templates";
 import { Button } from "@/components/ui/button";
@@ -84,11 +85,14 @@ export function TemplateList() {
           <EmptyState
             icon={<FileText />}
             title="Write your first template"
-            description="Save the emails you send again and again. Fields like {{job_title}} and {{company_name}} are filled in for each job."
+            description="Save the emails you send again and again. Fields like {{job_title}} and {{company_name}} are filled in for each job. Start with three professional emails, or write your own."
             actions={
-              <Button variant="primary" onClick={() => openEditor(null)}>
-                <Plus /> New template
-              </Button>
+              <>
+                <StarterTemplatesButton />
+                <Button onClick={() => openEditor(null)}>
+                  <Plus /> New template
+                </Button>
+              </>
             }
           />
         </Card>
@@ -185,5 +189,35 @@ export function TemplateList() {
         )}
       </ConfirmDialog>
     </>
+  );
+}
+
+/** Adds the professional starter emails (application, recruiter outreach, follow-up); the first is the default. */
+function StarterTemplatesButton() {
+  const save = useSaveTemplate();
+  const [adding, setAdding] = useState(false);
+  const [failed, setFailed] = useState<string | null>(null);
+
+  async function addAll() {
+    setAdding(true);
+    setFailed(null);
+    try {
+      for (const [i, t] of STARTER_TEMPLATES.entries()) {
+        await save.mutateAsync({ input: { name: t.name, subject: t.subject, body: t.body, isDefault: i === 0 } });
+      }
+    } catch (error) {
+      setFailed(errorMessage(error));
+    } finally {
+      setAdding(false);
+    }
+  }
+
+  return (
+    <span className="flex flex-col items-center gap-1">
+      <Button variant="primary" isLoading={adding} onClick={() => void addAll()}>
+        <Sparkles /> Add starter templates
+      </Button>
+      {failed && <span className="text-xs text-danger-text" role="alert">{failed}</span>}
+    </span>
   );
 }

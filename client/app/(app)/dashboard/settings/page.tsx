@@ -14,7 +14,7 @@ export default function SettingsPage() {
     <>
       <PageHeader
         title="Settings"
-        description="Details you reuse in every resume, and your accent colour."
+        description="Details you reuse in resumes and emails, and your accent colour."
         breadcrumbs={[{ label: "CareerPilot", href: ROUTES.dashboard }, { label: "Settings" }]}
       />
       <div className="@container flex max-w-4xl flex-col gap-6">
