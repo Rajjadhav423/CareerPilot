@@ -77,6 +77,10 @@ app/
 
 - Prefer **container queries** (`@container`, `@2xl:`, `@4xl:`) where the sidebar changes the available width; use viewport breakpoints for the shell.
 - Wide data: a table on wide containers and a card list on narrow ones (see `components/discover/job-results.tsx`).
+- Tables follow Atlassian's Dynamic Table (`components/ui/table.tsx`): no outer frame, a 2px `border-border` rule under the
+  header and the last row, no lines between rows, 12px bold `text-subtle` headers, `px-2 py-1` cells with the first and
+  last columns flush, `bg-neutral-subtle-hovered` row hover, `bg-selected` for selected rows, and sort arrows that
+  appear only on hover/focus or on the sorted column. Use `DataTable` for sortable, searchable or selectable lists.
 - Touch: bigger targets with `pointer-coarse:` variants; inputs use 16px text on touch devices (stops iOS zoom).
 - Rows of chips/filters swipe horizontally on narrow screens; board columns are 85% wide with scroll-snap on phones.
 - No horizontal page scroll at 390px, 768px or 1440px wide. Check both light and dark.

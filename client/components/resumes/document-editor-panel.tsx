@@ -149,20 +149,18 @@ export function DocumentEditorPanel({
     select(locatePointer(value, issue.path));
   }
 
-  // Text selected in the preview: jump to where it's written
-  const [notFound, setNotFound] = useState<string | null>(null);
-  useEffect(() => {
-    if (!reveal) return;
-    const range = locateText(value, reveal.text, reveal.occurrence);
-    setNotFound(range ? null : reveal.text);
-    select(range);
-    // eslint-disable-next-line react-hooks/exhaustive-deps -- only when a new selection arrives
-  }, [reveal?.id]);
-
   /** Selects a range of the JSON and scrolls it into view. */
   function select(range: { start: number; end: number } | null) {
     if (range) editor.current?.select(range.start, range.end);
   }
+
+  // Text selected in the preview: jump to where it's written (or say it isn't written as is)
+  const revealed = useMemo(() => (reveal ? locateText(value, reveal.text, reveal.occurrence) : null), [reveal, value]);
+  const notFound = reveal && !revealed ? reveal.text : null;
+  useEffect(() => {
+    if (revealed) editor.current?.select(revealed.start, revealed.end);
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- only when a new selection arrives, not on every edit
+  }, [reveal?.id]);
 
   const errors = result ? result.errors : previewIssues;
   const warnings = result?.warnings ?? [];

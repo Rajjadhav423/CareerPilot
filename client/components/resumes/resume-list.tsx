@@ -109,7 +109,13 @@ export function ResumeList() {
                     </DropdownMenuContent>
                   </DropdownMenu>
                 </div>
+                {resume.aiCopy && (
+                  <p className="text-xs text-subtle">
+                    Your AI assistant rewrites this copy for each job application. Your own resumes don&apos;t change.
+                  </p>
+                )}
                 <div className="mt-auto flex flex-wrap items-center gap-2">
+                  {resume.aiCopy && <Lozenge appearance="inprogress">AI tailored</Lozenge>}
                   <Lozenge>{templateName(resume.templateId)}</Lozenge>
                   <Lozenge>{resume.pageSize === "LETTER" ? "Letter" : "A4"}</Lozenge>
                   {resume.pendingProposals > 0 && (

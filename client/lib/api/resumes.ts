@@ -71,6 +71,8 @@ export type ResumeSummary = {
   fullName: string | null;
   /** Suggestions (imported JSON, AI) waiting for review */
   pendingProposals: number;
+  /** The AI assistant's tailored copy (one per user), rewritten for each application; the user's resumes stay as they are */
+  aiCopy: boolean;
   createdAt: string;
   updatedAt: string;
 };

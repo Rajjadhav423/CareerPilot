@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useRef, useState, useSyncExternalStore } from "react";
 import { useAuth } from "@clerk/nextjs";
 import { RefreshCw } from "lucide-react";
 
@@ -36,6 +36,12 @@ function readAutoApply() {
   }
 }
 
+/** Follows changes made in other tabs. */
+function subscribeToStorage(onChange: () => void) {
+  window.addEventListener("storage", onChange);
+  return () => window.removeEventListener("storage", onChange);
+}
+
 /**
  * Live preview: the server creates the PDF and the browser draws each page as an image, so what you see is exactly
  * what downloads — same fonts, margins and page breaks.
@@ -49,7 +55,10 @@ export function ResumePreview({ input, ready, onFieldErrors, onDocumentIssues, o
   const [pdf, setPdf] = useState<{ data: string; pages: number } | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
-  const [autoApply, setAutoApply] = useState(true);
+  // The saved choice (read in the browser only; on by default), until changed on this page
+  const storedAutoApply = useSyncExternalStore(subscribeToStorage, readAutoApply, () => true);
+  const [chosenAutoApply, setAutoApply] = useState<boolean | null>(null);
+  const autoApply = chosenAutoApply ?? storedAutoApply;
   /** The input of the last render (or the one in progress) */
   const [renderedKey, setRenderedKey] = useState<string | null>(null);
   /** Bumped by Apply to render the current input now */
@@ -57,7 +66,6 @@ export function ResumePreview({ input, ready, onFieldErrors, onDocumentIssues, o
   const key = JSON.stringify(input);
   const controllerRef = useRef<AbortController | null>(null);
 
-  useEffect(() => setAutoApply(readAutoApply()), []);
 
   function changeAutoApply(on: boolean) {
     setAutoApply(on);

@@ -208,7 +208,7 @@ export function AddJobDialog({ open, onOpenChange }: AddJobDialogProps) {
                 Auto-fill from URL
               </p>
               <p className="text-xs text-subtlest">
-                Paste a LinkedIn job post or any job-listing URL — we'll fill in the details for you.
+                Paste a LinkedIn job post or any job-listing URL — we&apos;ll fill in the details for you.
               </p>
               <div className="flex gap-2">
                 <div className="relative flex-1">

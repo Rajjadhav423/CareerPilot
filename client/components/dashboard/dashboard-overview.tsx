@@ -83,8 +83,8 @@ export function DashboardOverview() {
   const { user } = useUser();
   const jobs = useJobs();
   const [addOpen, setAddOpen] = useState(false);
-  // The clock is read only once jobs arrive (in the browser), never while the page is pre-rendered
-  const data = useMemo(() => (jobs.data ? summarize(jobs.data, Date.now()) : null), [jobs.data]);
+  // "Now" is when the jobs were fetched: no clock read during render (pure, and never during pre-rendering)
+  const data = useMemo(() => (jobs.data ? summarize(jobs.data, jobs.dataUpdatedAt) : null), [jobs.data, jobs.dataUpdatedAt]);
   const now = data?.now ?? null;
   const offline = jobs.error instanceof ApiError && jobs.error.status === 0;
 

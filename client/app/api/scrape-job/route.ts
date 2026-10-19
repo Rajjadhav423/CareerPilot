@@ -102,7 +102,7 @@ export async function POST(req: NextRequest) {
   }
 
   // Resolve LinkedIn short links (linkedin.com/posts/… or li.lk/…)
-  let fetchUrl = url;
+  const fetchUrl = url;
 
   let html: string;
   try {
