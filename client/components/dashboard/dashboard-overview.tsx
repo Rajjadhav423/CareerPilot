@@ -22,8 +22,11 @@ import type { Job } from "@/lib/api/jobs";
 import { formatRelativeTime } from "@/lib/format";
 import { JOB_STATUSES, type JobStatus } from "@/lib/jobs/statuses";
 import { useJobs } from "@/lib/jobs/use-jobs";
+import { FOLLOW_UP_AFTER_DAYS, followUpsDue, type FollowUp } from "@/lib/email/follow-ups";
+import { useAllSentEmails } from "@/lib/email/use-application-emails";
 import { ROUTES } from "@/lib/routes";
 import { cn } from "@/lib/utils";
+import { ComposeEmailDialog } from "@/components/applications/compose-email-dialog";
 import { AddJobDialog } from "@/components/jobs/add-job-dialog";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
@@ -32,8 +35,6 @@ import { SectionMessage } from "@/components/ui/section-message";
 import { Spinner } from "@/components/ui/spinner";
 
 const DAY = 24 * 60 * 60 * 1000;
-/** Applied this long ago with no change since: time to follow up */
-const FOLLOW_UP_AFTER_DAYS = 7;
 
 /** Segment colours of the pipeline bar, from the status tokens (matching each status lozenge). */
 const STATUS_BAR: Record<JobStatus, string> = {
@@ -63,10 +64,6 @@ function summarize(jobs: Job[], now: number) {
     offers: count("OFFER"),
     responseRate: applied.length > 0 ? Math.round((heardBack / applied.length) * 100) : null,
     pipeline: JOB_STATUSES.map((status) => ({ ...status, count: count(status.id) })),
-    followUps: jobs
-      .filter((job) => job.status === "APPLIED" && job.appliedAt && now - Date.parse(job.updatedAt) >= FOLLOW_UP_AFTER_DAYS * DAY)
-      .sort((a, b) => Date.parse(a.appliedAt!) - Date.parse(b.appliedAt!))
-      .slice(0, 5),
     recent: [...jobs].sort((a, b) => Date.parse(b.updatedAt) - Date.parse(a.updatedAt)).slice(0, 6),
     now,
   };
@@ -85,6 +82,12 @@ export function DashboardOverview() {
   const [addOpen, setAddOpen] = useState(false);
   // "Now" is when the jobs were fetched: no clock read during render (pure, and never during pre-rendering)
   const data = useMemo(() => (jobs.data ? summarize(jobs.data, jobs.dataUpdatedAt) : null), [jobs.data, jobs.dataUpdatedAt]);
+  const emails = useAllSentEmails();
+  // Wait for the sent emails (or their failure): until then every applied job would look like it had no email
+  const followUps = useMemo(
+    () => (jobs.data && !emails.isPending ? followUpsDue(jobs.data, emails.data ?? [], jobs.dataUpdatedAt) : []),
+    [jobs.data, jobs.dataUpdatedAt, emails.data, emails.isPending],
+  );
   const now = data?.now ?? null;
   const offline = jobs.error instanceof ApiError && jobs.error.status === 0;
 
@@ -98,8 +101,8 @@ export function DashboardOverview() {
           </h1>
           <p className="mt-1 text-sm text-subtle">
             {data && data.active > 0
-              ? `${data.active} active ${data.active === 1 ? "application" : "applications"}${data.followUps.length > 0
-                ? ` · ${data.followUps.length} waiting for a follow-up` : ""}`
+              ? `${data.active} active ${data.active === 1 ? "application" : "applications"}${followUps.length > 0
+                ? ` · ${followUps.length} waiting for a follow-up` : ""}`
               : "Here's where your job search stands."}
           </p>
         </div>
@@ -147,7 +150,7 @@ export function DashboardOverview() {
 
           <div className="grid gap-4 @4xl:grid-cols-3">
             <Pipeline items={data.pipeline} total={jobs.data!.length} className="@4xl:col-span-2" />
-            <FollowUps jobs={data.followUps} now={data.now} />
+            <FollowUps items={followUps} loading={emails.isPending} />
           </div>
 
           <RecentActivity jobs={data.recent} now={data.now} />
@@ -216,37 +219,73 @@ function Pipeline({ items, total, className }: {
   );
 }
 
-function FollowUps({ jobs, now }: { jobs: Job[]; now: number }) {
+/** At most this many follow-ups listed on the dashboard (oldest first) */
+const FOLLOW_UPS_SHOWN = 5;
+
+function FollowUps({ items, loading }: { items: FollowUp[]; loading: boolean }) {
   return (
     <Card className="gap-4">
       <CardHeader>
         <div className="min-w-0">
           <CardTitle>Follow up</CardTitle>
-          <CardDescription className="mt-1">Applied {FOLLOW_UP_AFTER_DAYS}+ days ago, no update since</CardDescription>
+          <CardDescription className="mt-1">No reply {FOLLOW_UP_AFTER_DAYS}+ days after your email</CardDescription>
         </div>
       </CardHeader>
       <CardContent>
-        {jobs.length === 0 ? (
+        {loading ? (
+          <p className="flex items-center gap-2 py-2 text-sm text-subtle"><Spinner size="sm" /> Checking your emails…</p>
+        ) : items.length === 0 ? (
           <p className="flex items-center gap-2 py-2 text-sm text-subtle">
             <CheckCircle2 className="size-4 text-success-text" aria-hidden /> Nothing waiting. You&apos;re up to date.
           </p>
         ) : (
           <ul className="flex flex-col divide-y divide-border">
-            {jobs.map((job) => (
-              <li key={job.id} className="flex items-start gap-3 py-2 first:pt-0 last:pb-0">
-                <CalendarClock className="mt-0.5 size-4 shrink-0 text-warning-text" aria-hidden />
-                <div className="min-w-0 flex-1">
-                  <p className="truncate text-sm font-medium text-foreground">{job.title}</p>
-                  <p className="truncate text-xs text-subtle">
-                    {job.company} · applied {Math.floor((now - Date.parse(job.appliedAt!)) / DAY)} days ago
-                  </p>
-                </div>
+            {items.slice(0, FOLLOW_UPS_SHOWN).map((item) => <FollowUpRow key={item.job.id} item={item} />)}
+            {items.length > FOLLOW_UPS_SHOWN && (
+              <li className="pt-2 text-xs text-subtle">
+                +{items.length - FOLLOW_UPS_SHOWN} more ·{" "}
+                <Link href={ROUTES.jobsEmails} className="text-link hover:underline">See sent emails</Link>
               </li>
-            ))}
+            )}
           </ul>
         )}
       </CardContent>
     </Card>
+  );
+}
+
+/** One application waiting on the user, with the email that moves it forward. */
+function FollowUpRow({ item }: { item: FollowUp }) {
+  const [open, setOpen] = useState(false);
+  const { job, days } = item;
+  const detail = item.kind === "due"
+    ? `${item.followUpNumber === 1 ? "Emailed" : "Followed up"} ${days} days ago, no reply`
+    : item.kind === "bounced" ? `Email to ${item.lastEmail.recipient} bounced` : `Applied ${days} days ago, no email sent`;
+
+  return (
+    <li className="flex items-start gap-3 py-2 first:pt-0 last:pb-0">
+      <CalendarClock
+        className={cn("mt-0.5 size-4 shrink-0", item.kind === "bounced" ? "text-danger-text" : "text-warning-text")}
+        aria-hidden
+      />
+      <div className="min-w-0 flex-1">
+        <p className="truncate text-sm font-medium text-foreground">{job.title}</p>
+        <p className="truncate text-xs text-subtle">{job.company} · {detail}</p>
+      </div>
+      <Button size="compact" onClick={() => setOpen(true)}>
+        <Mail /> {item.kind === "due" ? "Follow up" : item.kind === "bounced" ? "Retry" : "Email"}
+      </Button>
+      <ComposeEmailDialog
+        job={job}
+        open={open}
+        onOpenChange={setOpen}
+        // A follow-up stays in the same Gmail thread; after a bounce, start fresh with an empty "To"
+        followUp={item.kind === "due"
+          ? { id: item.lastEmail.id, recipient: item.lastEmail.recipient, subject: item.lastEmail.subject, sentAt: item.lastEmail.sentAt }
+          : undefined}
+        initialTo={item.kind === "bounced" ? "" : undefined}
+      />
+    </li>
   );
 }
 

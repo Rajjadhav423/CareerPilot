@@ -54,14 +54,48 @@ const features = tableFeatures({
 });
 const helper = createColumnHelper<typeof features, JobPosting>();
 
-const columns = helper.columns([
+/** "85%" lozenge coloured by how well the resume covers the job's skills. */
+function MatchLozenge({ job }: { job: JobPosting }) {
+  if (!job.match) return <span className="text-xs text-subtlest" title="The post names no skills we know">—</span>;
+  const { score } = job.match;
+  return (
+    <Lozenge appearance={score >= 70 ? "success" : score >= 40 ? "moved" : "default"} isBold={score >= 70}>
+      {score}% match
+    </Lozenge>
+  );
+}
+
+/** "Has: Java, AWS · Missing: Kafka" — which of the job's skills the resume covers. */
+function MatchSkills({ job }: { job: JobPosting }) {
+  if (!job.match) return null;
+  const { matched, missing } = job.match;
+  return (
+    <p className="line-clamp-2 text-xs text-subtle">
+      {matched.length > 0 && <><span className="text-success-text">Has:</span> {matched.join(", ")}</>}
+      {matched.length > 0 && missing.length > 0 && " · "}
+      {missing.length > 0 && <><span className="text-subtlest">Missing:</span> {missing.join(", ")}</>}
+    </p>
+  );
+}
+
+const matchColumn = helper.accessor((job) => job.match?.score ?? -1, {
+  id: "match",
+  header: "Match",
+  sortFn: "alphanumeric",
+  cell: ({ row }) => <MatchLozenge job={row.original} />,
+  meta: { cellClassName: "whitespace-nowrap" } satisfies DataTableColumnMeta,
+});
+
+const baseColumns = helper.columns([
   helper.accessor("title", {
     header: "Job",
     sortFn: "alphanumeric",
     cell: ({ row }) => (
       <>
         <JobLink job={row.original} />
-        {row.original.department && <p className="line-clamp-2 text-xs text-subtlest">{row.original.department}</p>}
+        {row.original.match
+          ? <MatchSkills job={row.original} />
+          : row.original.department && <p className="line-clamp-2 text-xs text-subtlest">{row.original.department}</p>}
       </>
     ),
     meta: { cellClassName: "max-w-md" } satisfies DataTableColumnMeta,
@@ -119,13 +153,20 @@ const columns = helper.columns([
   }),
 ]);
 
-/** Search results in the shared list table (cards when the content area is narrow), sortable by any column. */
-export function JobResults({ jobs }: { jobs: JobPosting[] }) {
+const columns = baseColumns;
+/** With a "Match" column first, when results are matched against a resume */
+const matchColumns = helper.columns([matchColumn, ...baseColumns]);
+
+/**
+ * Search results in the shared list table (cards when the content area is narrow), sortable by any column.
+ * `matching`: results carry a resume match; shows the Match column and each job's matched and missing skills.
+ */
+export function JobResults({ jobs, matching = false }: { jobs: JobPosting[]; matching?: boolean }) {
   // Empty = the order the search returned (best match first)
   const [sorting, setSorting] = useState<SortingState>([]);
   const table = useTable({
     features,
-    columns,
+    columns: matching ? matchColumns : columns,
     data: jobs,
     getRowId: (job) => job.id,
     state: { sorting },
@@ -153,7 +194,9 @@ export function JobResults({ jobs }: { jobs: JobPosting[] }) {
               {job.location && <span className="text-subtle"> · {job.location}</span>}
             </p>
             <ContactEmail job={job} />
+            {matching && <MatchSkills job={job} />}
             <div className="flex flex-wrap items-center gap-1.5">
+              {matching && <MatchLozenge job={job} />}
               <Lozenge>{roleLabel[job.techRole]}</Lozenge>
               <WorkplaceLozenge type={job.workplaceType} />
               <span className="text-xs text-subtlest">

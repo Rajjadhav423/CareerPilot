@@ -44,6 +44,10 @@ export type JobPosting = {
   contactEmail?: string;
   /** Other sources listing the same job (duplicates merged into this one) */
   alsoOn?: string[];
+  /** Known tech skills the post mentions */
+  skills: string[];
+  /** How well the chosen resume covers those skills; null when the post names none. Only when matching. */
+  match?: { score: number; matched: string[]; missing: string[] } | null;
   /** Where the job is: country/city from the source, or read from `location`; remote = can be done remotely */
   places: { country: string | null; city: string | null; remote: boolean }[];
 };
@@ -62,6 +66,8 @@ export type SourceStatus = {
 /** Mirrors the backend's discovery DiscoverResponse */
 export type DiscoverResponse = {
   jobs: JobPosting[];
+  /** Skills read from the chosen resume; null when not matching */
+  resumeSkills: string[] | null;
   total: number;
   /** Matches per role for the current query/location, ignoring the role filter. */
   roleCounts: Partial<Record<TechRole, number>>;
@@ -103,13 +109,15 @@ export type DiscoverParams = {
   limit?: number;
   /** Only jobs whose post gives a hiring email */
   hasEmail?: boolean;
+  /** Match against this resume and sort by match */
+  resumeId?: string | null;
   /** Re-fetch the sources now instead of using the cache. */
   refresh?: boolean;
 };
 
 /** Job sources are fetched and cached by the backend and shared by all users; the search runs on that cache. */
 export async function discoverJobs({
-  q = "", location = "", role, country, city, remote = false, posted, from, to, hasEmail = false, limit = 100, refresh = false,
+  q = "", location = "", role, country, city, remote = false, posted, from, to, hasEmail = false, resumeId, limit = 100, refresh = false,
 }: DiscoverParams, token: string | null) {
   const params = new URLSearchParams({ q, location, limit: String(limit), refresh: String(refresh) });
   if (role) params.set("role", role);
@@ -117,6 +125,7 @@ export async function discoverJobs({
   if (country && city) params.set("city", city);
   if (remote) params.set("remote", "true");
   if (hasEmail) params.set("hasEmail", "true");
+  if (resumeId) params.set("resumeId", resumeId);
   if (posted) params.set("posted", posted);
   else {
     if (from) params.set("from", from);

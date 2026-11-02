@@ -16,6 +16,7 @@ import {
   type TechRole,
 } from "@/lib/api/discover";
 import { formatNumber, formatRelativeTime } from "@/lib/format";
+import { useResumes } from "@/lib/resumes/use-resumes";
 import { Button } from "@/components/ui/button";
 import { DatePicker } from "@/components/ui/date-picker";
 import { EmptyState } from "@/components/ui/empty-state";
@@ -42,6 +43,26 @@ function today() {
   return new Date(now.getTime() - now.getTimezoneOffset() * 60_000).toISOString().slice(0, 10);
 }
 
+/** The resume Find jobs matches against, remembered on this device */
+const MATCH_RESUME_KEY = "careerpilot.findJobs.matchResume";
+
+function savedMatchResume() {
+  try {
+    return localStorage.getItem(MATCH_RESUME_KEY) ?? "";
+  } catch {
+    return "";
+  }
+}
+
+function saveMatchResume(id: string) {
+  try {
+    if (id) localStorage.setItem(MATCH_RESUME_KEY, id);
+    else localStorage.removeItem(MATCH_RESUME_KEY);
+  } catch {
+    // Private mode or blocked storage: the choice just isn't remembered
+  }
+}
+
 type Result = { data: DiscoverResponse; error: null } | { data: null; error: string };
 
 async function load(params: DiscoverParams, getToken: () => Promise<string | null>): Promise<Result> {
@@ -65,6 +86,9 @@ export function JobSearch() {
   const [from, setFrom] = useState("");
   const [to, setTo] = useState("");
   const [role, setRole] = useState<TechRole | null>(null);
+  // Match against this resume (sorted by match), "" for no matching
+  const [resumeId, setResumeId] = useState("");
+  const resumes = useResumes();
   const [limit, setLimit] = useState(PAGE_SIZE);
   const [result, setResult] = useState<Result | null>(null);
   const [loading, setLoading] = useState(true);
@@ -74,12 +98,17 @@ export function JobSearch() {
   useEffect(() => {
     // Wait for Clerk: before it loads there is no session token yet.
     if (!isLoaded) return;
-    load({ limit: PAGE_SIZE }, getToken).then((next) => {
-      if (latestRequest.current === 0) {
-        setResult(next);
-        setLoading(false);
-      }
-    });
+    const saved = savedMatchResume();
+    load({ limit: PAGE_SIZE, resumeId: saved || null }, getToken)
+      // The remembered resume may have been deleted: search without matching instead of failing
+      .then((next) => (next.error && saved ? (saveMatchResume(""), load({ limit: PAGE_SIZE }, getToken)) : next))
+      .then((next) => {
+        if (latestRequest.current === 0) {
+          setResumeId(next.data?.resumeSkills ? saved : "");
+          setResult(next);
+          setLoading(false);
+        }
+      });
   }, [isLoaded, getToken]);
 
   function run(params: DiscoverParams) {
@@ -94,7 +123,7 @@ export function JobSearch() {
 
   /** Current filters as request parameters */
   function params(overrides: Partial<{
-    role: TechRole | null; where: string; city: string; posted: string; from: string; to: string; hasEmail: boolean; limit: number; refresh: boolean;
+    role: TechRole | null; where: string; city: string; posted: string; from: string; to: string; hasEmail: boolean; resumeId: string; limit: number; refresh: boolean;
   }> = {}): DiscoverParams {
     const w = overrides.where ?? where;
     const c = overrides.city ?? city;
@@ -110,6 +139,7 @@ export function JobSearch() {
       from: custom ? (overrides.from ?? from) || null : null,
       to: custom ? (overrides.to ?? to) || null : null,
       hasEmail: overrides.hasEmail ?? hasEmail,
+      resumeId: (overrides.resumeId ?? resumeId) || null,
       limit: overrides.limit ?? PAGE_SIZE,
       refresh: overrides.refresh ?? false,
     };
@@ -138,6 +168,13 @@ export function JobSearch() {
     setCity(next);
     setLimit(PAGE_SIZE);
     run(params({ city: next }));
+  }
+
+  function selectResume(next: string) {
+    setResumeId(next);
+    saveMatchResume(next);
+    setLimit(PAGE_SIZE);
+    run(params({ resumeId: next }));
   }
 
   function toggleHasEmail() {
@@ -186,7 +223,14 @@ export function JobSearch() {
       </form>
 
       {data && (
-        <div className="grid grid-cols-1 gap-2 @lg:grid-cols-2 @3xl:max-w-4xl @3xl:grid-cols-3">
+        <div className="grid grid-cols-1 gap-2 @lg:grid-cols-2 @5xl:max-w-6xl @5xl:grid-cols-4">
+          <Select aria-label="Match with resume" value={resumeId} onChange={(e) => selectResume(e.target.value)}
+            disabled={!resumes.data?.length} title="Sort jobs by how well this resume's skills fit">
+            <option value="">{resumes.data?.length ? "Match with a resume…" : "No resume to match with"}</option>
+            {resumes.data?.map((r) => (
+              <option key={r.id} value={r.id}>Match: {r.title}{r.aiCopy ? " (AI copy)" : ""}</option>
+            ))}
+          </Select>
           <Select aria-label="Where" value={where} onChange={(e) => selectWhere(e.target.value)}>
             <option value={ANYWHERE}>Anywhere</option>
             <option value={REMOTE}>Remote ({formatNumber(data.facets.remote)})</option>
@@ -316,9 +360,22 @@ export function JobSearch() {
         />
       )}
 
+      {data?.resumeSkills && (
+        data.resumeSkills.length === 0 ? (
+          <SectionMessage appearance="warning" title="No skills found in this resume">
+            Add a Skills section (e.g. Java, React, AWS) so jobs can be matched against it.
+          </SectionMessage>
+        ) : (
+          <p className="text-sm text-subtle">
+            Best match first, from the {data.resumeSkills.length} skills in your resume:{" "}
+            <span className="text-foreground">{data.resumeSkills.join(", ")}</span>
+          </p>
+        )
+      )}
+
       {data && data.jobs.length > 0 && (
         <div className={loading ? "opacity-60 transition-opacity" : undefined}>
-          <JobResults jobs={data.jobs} />
+          <JobResults jobs={data.jobs} matching={!!data.resumeSkills} />
 
           {data.jobs.length < data.total && (
             <div className="flex justify-center pt-4">
