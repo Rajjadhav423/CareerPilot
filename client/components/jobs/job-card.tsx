@@ -10,10 +10,13 @@ import { JobEmailStatus } from "./job-email-status";
 
 export const workModeLabel = { ONSITE: "On-site", HYBRID: "Hybrid", REMOTE: "Remote" } as const;
 
-/** A job on the board. The ⋯ menu moves it between columns (works with touch, unlike drag and drop). */
-export function JobCard({ job }: { job: Job }) {
+/**
+ * A job on the board. Drag it to another column, or use the ⋯ menu (also works without a pointer).
+ * isDragging / isOverlay: see BoardCard.
+ */
+export function JobCard({ job, isDragging, isOverlay }: { job: Job; isDragging?: boolean; isOverlay?: boolean }) {
   return (
-    <BoardCard className="gap-2">
+    <BoardCard className="gap-2" isDragging={isDragging} isOverlay={isOverlay}>
       <div className="flex items-start justify-between gap-2">
         <div className="min-w-0">
           {safeUrl(job.jobUrl) ? (
