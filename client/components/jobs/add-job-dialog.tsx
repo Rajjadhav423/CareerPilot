@@ -7,8 +7,8 @@ import { useAuth } from "@clerk/nextjs";
 import { ApiError } from "@/lib/api/client";
 import { importJobFromUrl, type Job, type WorkMode } from "@/lib/api/jobs";
 import { isValidEmailAddress } from "@/lib/email/placeholders";
-import { useCreateJob } from "@/lib/jobs/use-jobs";
-import { ComposeEmailDialog } from "@/components/applications/compose-email-dialog";
+import { useCreateJob, useUpdateJob } from "@/lib/jobs/use-jobs";
+import { ComposeEmailDialog, contactEmailOf } from "@/components/applications/compose-email-dialog";
 import { Button } from "@/components/ui/button";
 import {
   Dialog,
@@ -54,14 +54,40 @@ function validate(form: FormState): Record<string, string> {
 
 type ScrapeState = "idle" | "loading" | "done" | "error";
 
+/** A saved job as the form's starting values. */
+function fromJob(job: Job): FormState {
+  return {
+    title: job.title, company: job.company, location: job.location ?? "", workMode: job.workMode ?? "",
+    jobUrl: job.jobUrl ?? "", description: job.description ?? "", hrEmail: contactEmailOf(job),
+  };
+}
+
+const HR_EMAIL_LINE = /^HR email:.*$/m;
+
+/** The job's notes with the "HR email: …" line set (or removed when blank); the rest of the notes is kept. */
+function notesWithHrEmail(notes: string | null | undefined, hrEmail: string): string | null {
+  const line = hrEmail ? `HR email: ${hrEmail}` : "";
+  const current = notes ?? "";
+  const next = HR_EMAIL_LINE.test(current)
+    ? current.replace(HR_EMAIL_LINE, line)
+    : [current, line].filter((part) => part.trim()).join("\n");
+  return next.replace(/\n{3,}/g, "\n\n").trim() || null;
+}
+
 type AddJobDialogProps = {
   open: boolean;
   onOpenChange: (open: boolean) => void;
+  /** Edit this job instead of adding one: the form starts with its details and saves changes to it */
+  job?: Job;
 };
 
-/** Manually add a job to the board (it starts in "Saved"). Paste a LinkedIn link to auto-fill. */
-export function AddJobDialog({ open, onOpenChange }: AddJobDialogProps) {
-  const [form, setForm] = useState<FormState>(EMPTY);
+/**
+ * Add a job to the board (it starts in "Saved"; paste a LinkedIn link to auto-fill), or with `job`, edit one:
+ * title, company, location, work mode, link, description and HR email.
+ */
+export function AddJobDialog({ open, onOpenChange, job }: AddJobDialogProps) {
+  const editing = !!job;
+  const [form, setForm] = useState<FormState>(() => (job ? fromJob(job) : EMPTY));
   const [errors, setErrors] = useState<Record<string, string>>({});
   const [scrapeState, setScrapeState] = useState<ScrapeState>("idle");
   const [scrapeError, setScrapeError] = useState<string | null>(null);
@@ -73,6 +99,8 @@ export function AddJobDialog({ open, onOpenChange }: AddJobDialogProps) {
   /** The job just saved with "Add & email HR": its email opens next, to this address */
   const [emailJob, setEmailJob] = useState<{ job: Job; to: string } | null>(null);
   const createJob = useCreateJob();
+  const updateJob = useUpdateJob();
+  const saving = editing ? updateJob.isPending : createJob.isPending;
   const { getToken } = useAuth();
 
   function update<K extends keyof FormState>(key: K, value: FormState[K]) {
@@ -89,13 +117,14 @@ export function AddJobDialog({ open, onOpenChange }: AddJobDialogProps) {
   function close(nextOpen: boolean) {
     onOpenChange(nextOpen);
     if (!nextOpen) {
-      setForm(EMPTY);
+      setForm(job ? fromJob(job) : EMPTY);
       setErrors({});
       setScrapeState("idle");
       setScrapeError(null);
       setLinkedinUrl("");
       setUsedAi(false);
       createJob.reset();
+      updateJob.reset();
     }
   }
 
@@ -143,6 +172,28 @@ export function AddJobDialog({ open, onOpenChange }: AddJobDialogProps) {
 
     const hrEmail = form.hrEmail.trim();
     setSavingToEmail(thenEmail);
+    if (job) {
+      // The API leaves null fields unchanged and clears empty ones, so a field emptied here is sent as ""
+      const input = {
+        title: form.title.trim(),
+        company: form.company.trim(),
+        location: form.location.trim(),
+        workMode: form.workMode,
+        jobUrl: form.jobUrl.trim(),
+        description: form.description,
+        notes: notesWithHrEmail(job.notes, hrEmail) ?? "",
+      };
+      updateJob.mutate({ id: job.id, input }, {
+        onSuccess: (saved) => {
+          close(false);
+          if (thenEmail) setEmailJob({ job: saved, to: hrEmail });
+        },
+        onError: (error) => {
+          if (error instanceof ApiError) setErrors(error.fieldErrors);
+        },
+      });
+      return;
+    }
     createJob.mutate(
       {
         title: form.title,
@@ -170,7 +221,8 @@ export function AddJobDialog({ open, onOpenChange }: AddJobDialogProps) {
     save(false);
   }
 
-  const serverError = createJob.error instanceof ApiError ? createJob.error.message : createJob.error ? "Unexpected error." : null;
+  const saveError = editing ? updateJob.error : createJob.error;
+  const serverError = saveError instanceof ApiError ? saveError.message : saveError ? "Unexpected error." : null;
 
   return (
     <>
@@ -178,8 +230,11 @@ export function AddJobDialog({ open, onOpenChange }: AddJobDialogProps) {
       <DialogContent>
         <form onSubmit={submit} noValidate className="flex min-h-0 flex-col">
           <DialogHeader>
-            <DialogTitle>Add a job</DialogTitle>
-            <DialogDescription>It goes into the Saved column of your board.</DialogDescription>
+            <DialogTitle>{editing ? "Edit job" : "Add a job"}</DialogTitle>
+            <DialogDescription>
+              {editing ? "Fix the title, company, link, description or HR email. Its status and emails stay as they are."
+                : "It goes into the Saved column of your board."}
+            </DialogDescription>
           </DialogHeader>
 
           <DialogBody className="flex flex-col gap-4">
@@ -189,7 +244,8 @@ export function AddJobDialog({ open, onOpenChange }: AddJobDialogProps) {
               </SectionMessage>
             )}
 
-            {/* ── LinkedIn / job-post URL auto-fill ───────────────────── */}
+            {/* ── LinkedIn / job-post URL auto-fill (adding only) ─────── */}
+            {!editing && (
             <div className="flex flex-col gap-2 rounded-md border border-border bg-surface-raised p-3">
               <p className="flex items-center gap-1.5 text-sm font-semibold">
                 <Sparkles className="h-4 w-4 text-brand" />
@@ -248,6 +304,7 @@ export function AddJobDialog({ open, onOpenChange }: AddJobDialogProps) {
                 </p>
               )}
             </div>
+            )}
 
             <Field htmlFor="job-title" label="Job title" required error={errors.title}>
               <TextField
@@ -344,13 +401,13 @@ export function AddJobDialog({ open, onOpenChange }: AddJobDialogProps) {
               <Button variant="subtle">Cancel</Button>
             </DialogClose>
             <Button type="submit" variant={form.hrEmail.trim() ? "default" : "primary"}
-              isLoading={createJob.isPending && !savingToEmail}>
-              Add job
+              isLoading={saving && !savingToEmail}>
+              {editing ? "Save changes" : "Add job"}
             </Button>
             {form.hrEmail.trim() && (
-              <Button type="button" variant="primary" disabled={createJob.isPending}
-                isLoading={createJob.isPending && savingToEmail} onClick={() => save(true)}>
-                <Mail /> Add &amp; email HR
+              <Button type="button" variant="primary" disabled={saving}
+                isLoading={saving && savingToEmail} onClick={() => save(true)}>
+                <Mail /> {editing ? "Save & email HR" : <>Add &amp; email HR</>}
               </Button>
             )}
           </DialogFooter>

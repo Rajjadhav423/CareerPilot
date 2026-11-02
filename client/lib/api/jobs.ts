@@ -41,7 +41,9 @@ export type CreateJobInput = {
 };
 
 /** Mirrors JobDtos.UpdateJobRequest: omitted fields stay; "" clears optional text. */
-export type UpdateJobInput = Partial<Omit<CreateJobInput, "source" | "externalId">> & { archived?: boolean };
+/** Absent or null fields stay as they are; "" clears an optional one (location, workMode, jobUrl, description, notes). */
+export type UpdateJobInput = Partial<Omit<CreateJobInput, "source" | "externalId" | "workMode">>
+  & { workMode?: WorkMode | "" | null; archived?: boolean };
 
 export function listJobs(token: string | null) {
   return apiFetch<Job[]>("/api/v1/jobs", { token });
@@ -72,4 +74,9 @@ export function importJobFromUrl(url: string, token: string | null, signal?: Abo
 
 export function updateJob(id: string, input: UpdateJobInput, token: string | null) {
   return apiFetch<Job>(`/api/v1/jobs/${id}`, { method: "PATCH", json: input, token });
+}
+
+/** Deletes a job for good (only from CareerPilot itself; assistants can't). Refused while one of its emails is scheduled. */
+export function deleteJob(id: string, token: string | null) {
+  return apiFetch<void>(`/api/v1/jobs/${id}`, { method: "DELETE", token });
 }

@@ -3,7 +3,7 @@
 import { useAuth } from "@clerk/nextjs";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 
-import { createJob, listJobs, updateJob, type CreateJobInput, type Job, type UpdateJobInput } from "@/lib/api/jobs";
+import { createJob, deleteJob, listJobs, updateJob, type CreateJobInput, type Job, type UpdateJobInput } from "@/lib/api/jobs";
 
 const JOBS_KEY = ["jobs"] as const;
 
@@ -50,5 +50,22 @@ export function useUpdateJob() {
       if (context?.previous) queryClient.setQueryData(JOBS_KEY, context.previous);
     },
     onSettled: () => queryClient.invalidateQueries({ queryKey: JOBS_KEY }),
+  });
+}
+
+/**
+ * Deletes a job. It leaves the board once the server confirms (not optimistically), so the confirm dialog that
+ * asked can still show a refusal, e.g. "cancel its scheduled email first".
+ */
+export function useDeleteJob() {
+  const { getToken } = useAuth();
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: async (id: string) => deleteJob(id, await getToken()),
+    onSuccess: (_result, id) => {
+      queryClient.setQueryData<Job[]>(JOBS_KEY, (jobs = []) => jobs.filter((job) => job.id !== id));
+      void queryClient.invalidateQueries({ queryKey: JOBS_KEY });
+      void queryClient.invalidateQueries({ queryKey: ["emails"] });
+    },
   });
 }
