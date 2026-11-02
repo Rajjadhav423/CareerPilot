@@ -22,8 +22,8 @@ import type { Job } from "@/lib/api/jobs";
 import { formatRelativeTime } from "@/lib/format";
 import { JOB_STATUSES, type JobStatus } from "@/lib/jobs/statuses";
 import { useJobs } from "@/lib/jobs/use-jobs";
-import { FOLLOW_UP_AFTER_DAYS, followUpsDue, type FollowUp } from "@/lib/email/follow-ups";
-import { useAllSentEmails } from "@/lib/email/use-application-emails";
+import type { FollowUp } from "@/lib/api/application-emails";
+import { FOLLOW_UP_AFTER_DAYS, useFollowUps } from "@/lib/email/follow-ups";
 import { ROUTES } from "@/lib/routes";
 import { cn } from "@/lib/utils";
 import { ComposeEmailDialog } from "@/components/applications/compose-email-dialog";
@@ -82,12 +82,15 @@ export function DashboardOverview() {
   const [addOpen, setAddOpen] = useState(false);
   // "Now" is when the jobs were fetched: no clock read during render (pure, and never during pre-rendering)
   const data = useMemo(() => (jobs.data ? summarize(jobs.data, jobs.dataUpdatedAt) : null), [jobs.data, jobs.dataUpdatedAt]);
-  const emails = useAllSentEmails();
-  // Wait for the sent emails (or their failure): until then every applied job would look like it had no email
-  const followUps = useMemo(
-    () => (jobs.data && !emails.isPending ? followUpsDue(jobs.data, emails.data ?? [], jobs.dataUpdatedAt) : []),
-    [jobs.data, jobs.dataUpdatedAt, emails.data, emails.isPending],
-  );
+  const followUpsQuery = useFollowUps();
+  // Each follow-up with its full job (the email dialog needs it); jobs not loaded yet are left out
+  const followUps = useMemo(() => {
+    const byId = new Map(jobs.data?.map((job) => [job.id, job]));
+    return (followUpsQuery.data ?? []).flatMap((item) => {
+      const job = byId.get(item.job.id);
+      return job ? [{ ...item, job }] : [];
+    });
+  }, [jobs.data, followUpsQuery.data]);
   const now = data?.now ?? null;
   const offline = jobs.error instanceof ApiError && jobs.error.status === 0;
 
@@ -150,7 +153,7 @@ export function DashboardOverview() {
 
           <div className="grid gap-4 @4xl:grid-cols-3">
             <Pipeline items={data.pipeline} total={jobs.data!.length} className="@4xl:col-span-2" />
-            <FollowUps items={followUps} loading={emails.isPending} />
+            <FollowUps items={followUps} loading={followUpsQuery.isPending} />
           </div>
 
           <RecentActivity jobs={data.recent} now={data.now} />
@@ -222,7 +225,10 @@ function Pipeline({ items, total, className }: {
 /** At most this many follow-ups listed on the dashboard (oldest first) */
 const FOLLOW_UPS_SHOWN = 5;
 
-function FollowUps({ items, loading }: { items: FollowUp[]; loading: boolean }) {
+/** A follow-up with the full job it's about */
+type FollowUpItem = FollowUp & { job: Job };
+
+function FollowUps({ items, loading }: { items: FollowUpItem[]; loading: boolean }) {
   return (
     <Card className="gap-4">
       <CardHeader>
@@ -255,17 +261,17 @@ function FollowUps({ items, loading }: { items: FollowUp[]; loading: boolean }) 
 }
 
 /** One application waiting on the user, with the email that moves it forward. */
-function FollowUpRow({ item }: { item: FollowUp }) {
+function FollowUpRow({ item }: { item: FollowUpItem }) {
   const [open, setOpen] = useState(false);
   const { job, days } = item;
-  const detail = item.kind === "due"
+  const detail = item.kind === "DUE"
     ? `${item.followUpNumber === 1 ? "Emailed" : "Followed up"} ${days} days ago, no reply`
-    : item.kind === "bounced" ? `Email to ${item.lastEmail.recipient} bounced` : `Applied ${days} days ago, no email sent`;
+    : item.kind === "BOUNCED" ? `Email to ${item.lastEmail.recipient} bounced` : `Applied ${days} days ago, no email sent`;
 
   return (
     <li className="flex items-start gap-3 py-2 first:pt-0 last:pb-0">
       <CalendarClock
-        className={cn("mt-0.5 size-4 shrink-0", item.kind === "bounced" ? "text-danger-text" : "text-warning-text")}
+        className={cn("mt-0.5 size-4 shrink-0", item.kind === "BOUNCED" ? "text-danger-text" : "text-warning-text")}
         aria-hidden
       />
       <div className="min-w-0 flex-1">
@@ -273,17 +279,17 @@ function FollowUpRow({ item }: { item: FollowUp }) {
         <p className="truncate text-xs text-subtle">{job.company} · {detail}</p>
       </div>
       <Button size="compact" onClick={() => setOpen(true)}>
-        <Mail /> {item.kind === "due" ? "Follow up" : item.kind === "bounced" ? "Retry" : "Email"}
+        <Mail /> {item.kind === "DUE" ? "Follow up" : item.kind === "BOUNCED" ? "Retry" : "Email"}
       </Button>
       <ComposeEmailDialog
         job={job}
         open={open}
         onOpenChange={setOpen}
         // A follow-up stays in the same Gmail thread; after a bounce, start fresh with an empty "To"
-        followUp={item.kind === "due"
+        followUp={item.kind === "DUE"
           ? { id: item.lastEmail.id, recipient: item.lastEmail.recipient, subject: item.lastEmail.subject, sentAt: item.lastEmail.sentAt }
           : undefined}
-        initialTo={item.kind === "bounced" ? "" : undefined}
+        initialTo={item.kind === "BOUNCED" ? "" : undefined}
       />
     </li>
   );

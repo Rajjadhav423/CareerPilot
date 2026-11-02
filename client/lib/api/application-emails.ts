@@ -86,3 +86,21 @@ export function getSentEmailStatuses(ids: string[], token: string | null) {
 export function listAllSentEmails(token: string | null) {
   return apiFetch<SentEmailWithJob[]>("/api/v1/emails", { token });
 }
+
+/** The job a follow-up is about */
+export type FollowUpJob = { id: string; title: string; company: string; updatedAt: string };
+
+/**
+ * Mirrors the backend's FollowUp: an Applied job waiting on the user.
+ * DUE: no reply to lastEmail for 7+ days (follow up in its thread); BOUNCED: lastEmail bounced;
+ * NO_EMAIL: marked Applied without an email from CareerPilot, unchanged for 7+ days.
+ */
+export type FollowUp =
+  | { kind: "DUE"; job: FollowUpJob; days: number; lastEmail: SentEmail; followUpNumber: number }
+  | { kind: "BOUNCED"; job: FollowUpJob; days: number; lastEmail: SentEmail }
+  | { kind: "NO_EMAIL"; job: FollowUpJob; days: number };
+
+/** Applied jobs waiting on the user, oldest first. */
+export function listFollowUps(token: string | null) {
+  return apiFetch<FollowUp[]>("/api/v1/follow-ups", { token });
+}
