@@ -8,6 +8,8 @@ export const GOOGLE_SCOPES = {
   /** Message headers only (never bodies): shows bounces and replies to emails CareerPilot sent */
   gmailMetadata: "https://www.googleapis.com/auth/gmail.metadata",
   driveFile: "https://www.googleapis.com/auth/drive.file",
+  /** Create and send drafts: scheduled emails wait as drafts in the user's Gmail until they're sent */
+  gmailCompose: "https://www.googleapis.com/auth/gmail.compose",
 } as const;
 
 const KNOWN = new Set<string>(Object.values(GOOGLE_SCOPES));

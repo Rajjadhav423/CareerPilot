@@ -17,6 +17,7 @@ export const ROUTES = {
   resumeNew: "/dashboard/resumes/new",
   documents: "/dashboard/documents",
   settings: "/dashboard/settings",
+  mcp: "/dashboard/mcp",
 } as const;
 
 /** Editor page of one saved resume. */

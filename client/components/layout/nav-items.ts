@@ -4,6 +4,7 @@ import {
   FolderOpen,
   LayoutDashboard,
   Mail,
+  Plug,
   Search,
   Settings,
   UserRound,
@@ -31,6 +32,7 @@ export const navSections: NavSection[] = [
       { label: "Resumes", href: ROUTES.resumes, icon: FileText },
       { label: "Documents", href: ROUTES.documents, icon: FolderOpen },
       { label: "Email templates", href: ROUTES.templates, icon: Mail },
+      { label: "MCP plugin", href: ROUTES.mcp, icon: Plug },
     ],
   },
   {

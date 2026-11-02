@@ -10,6 +10,8 @@ import { GOOGLE_SCOPES, requestGoogleScopes } from "@/lib/google/request-scopes"
 export const GMAIL_SEND_SCOPE = GOOGLE_SCOPES.gmailSend;
 /** Optional: read message headers (not content) so CareerPilot can show bounces and replies. */
 export const GMAIL_METADATA_SCOPE = GOOGLE_SCOPES.gmailMetadata;
+/** Optional: create drafts, so scheduled emails can wait in the user's Gmail Drafts until they're sent. */
+export const GMAIL_COMPOSE_SCOPE = GOOGLE_SCOPES.gmailCompose;
 
 export const GMAIL_STATUS_KEY = ["gmail-status"] as const;
 
@@ -45,6 +47,17 @@ export function useAllowReplyTracking() {
     mutationFn: async () => {
       if (!user) throw new Error("You're not signed in.");
       await requestGoogleScopes(user, [GMAIL_SEND_SCOPE, GMAIL_METADATA_SCOPE], window.location.href);
+    },
+  });
+}
+
+/** Asks Google for permission to create drafts, used to schedule emails (keeps the permissions already granted). */
+export function useAllowScheduling() {
+  const { user } = useUser();
+  return useMutation({
+    mutationFn: async () => {
+      if (!user) throw new Error("You're not signed in.");
+      await requestGoogleScopes(user, [GMAIL_SEND_SCOPE, GMAIL_COMPOSE_SCOPE], window.location.href);
     },
   });
 }

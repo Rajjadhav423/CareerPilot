@@ -4,14 +4,17 @@ import { useEffect, useRef, useState } from "react";
 import Link from "next/link";
 import { useUser } from "@clerk/nextjs";
 import { useQueryClient } from "@tanstack/react-query";
-import { ArrowLeft, Paperclip, Send } from "lucide-react";
+import { ArrowLeft, CalendarClock, Paperclip, Send } from "lucide-react";
 
 import type { ComposedEmail, SendEmailResult } from "@/lib/api/application-emails";
 import { ApiError } from "@/lib/api/client";
 import type { Job } from "@/lib/api/jobs";
 import { findPlaceholders, insertAtCursor, isValidEmailAddress } from "@/lib/email/placeholders";
 import { useComposeEmail, useSendEmail, useSentEmails } from "@/lib/email/use-application-emails";
-import { GMAIL_STATUS_KEY, useConnectGmail, useGmailStatus } from "@/lib/email/use-gmail";
+import { formatSendAt, isFarEnoughAhead, timeZoneName, toSendAt, tomorrow } from "@/lib/email/schedule-time";
+import { GMAIL_STATUS_KEY, useAllowScheduling, useConnectGmail, useGmailStatus } from "@/lib/email/use-gmail";
+import { useScheduleEmail } from "@/lib/email/use-scheduled-emails";
+import type { ScheduledEmail } from "@/lib/api/scheduled-emails";
 import { useTemplates } from "@/lib/email/use-templates";
 import { formatRelativeTime } from "@/lib/format";
 import { JOB_STATUSES } from "@/lib/jobs/statuses";
@@ -21,6 +24,7 @@ import { AddDetailDialog } from "@/components/settings/add-detail-dialog";
 import { FieldsMenu } from "@/components/settings/fields-menu";
 import { Button } from "@/components/ui/button";
 import { Checkbox } from "@/components/ui/checkbox";
+import { DatePicker } from "@/components/ui/date-picker";
 import {
   Dialog,
   DialogBody,
@@ -38,6 +42,7 @@ import { Spinner } from "@/components/ui/spinner";
 import { TextField } from "@/components/ui/text-field";
 import { Toggle } from "@/components/ui/toggle";
 import { Textarea } from "@/components/ui/textarea";
+import { TimePicker } from "@/components/ui/time-picker";
 
 import { EmailStatusLozenge } from "./email-status";
 
@@ -100,7 +105,7 @@ export function ComposeEmailDialog({ job, open, onOpenChange, initialTo, followU
 }
 
 type Draft = { to: string; subject: string; body: string };
-type Step = "compose" | "review" | "sent";
+type Step = "compose" | "review" | "sent" | "scheduled";
 
 function errorMessage(error: unknown) {
   return error instanceof ApiError ? error.message : "Unexpected error.";
@@ -117,8 +122,16 @@ function Composer({ job, initialTo, followUp, onClose }: {
   const sent = useSentEmails(job.id);
   const compose = useComposeEmail(job.id);
   const send = useSendEmail(job.id);
+  const schedule = useScheduleEmail(job.id);
+  const allowScheduling = useAllowScheduling();
 
   const [step, setStep] = useState<Step>("compose");
+  // Send now, or schedule: the email waits as a draft in the user's Gmail until the chosen time
+  const [when, setWhen] = useState<"now" | "later">("now");
+  const [sendDate, setSendDate] = useState(() => tomorrow());
+  const [sendTime, setSendTime] = useState("09:00");
+  const [scheduled, setScheduled] = useState<ScheduledEmail | null>(null);
+  const [timeError, setTimeError] = useState<string | null>(null);
   const [templateId, setTemplateId] = useState<string | null>(null);
   const [composed, setComposed] = useState<ComposedEmail | null>(null);
   const [draft, setDraft] = useState<Draft>(() => followUp
@@ -221,6 +234,56 @@ function Composer({ job, initialTo, followUp, onClose }: {
     );
   }
 
+  const sendAt = when === "later" ? toSendAt(sendDate, sendTime) : null;
+  const canSchedule = !!gmail.data?.canSchedule;
+  const busy = send.isPending || schedule.isPending;
+
+  function confirmAndSchedule() {
+    if (!isFarEnoughAhead(sendAt)) {
+      setTimeError("Pick a time at least a minute from now.");
+      return;
+    }
+    setTimeError(null);
+    schedule.mutate(
+      { to: recipient, subject: draft.subject.trim(), body: draft.body, templateId, driveDocumentId: attached?.id ?? null, replyToId: followUp?.id ?? null, confirmed: true, sendAt },
+      {
+        onSuccess: (scheduledEmail) => {
+          setScheduled(scheduledEmail);
+          setStep("scheduled");
+        },
+        onError: (error) => {
+          if (error instanceof ApiError && error.code?.startsWith("GMAIL_")) {
+            queryClient.invalidateQueries({ queryKey: GMAIL_STATUS_KEY });
+          }
+        },
+      },
+    );
+  }
+
+  if (step === "scheduled" && scheduled) {
+    return (
+      <>
+        <DialogHeader>
+          <DialogTitle>{followUp ? "Follow-up scheduled" : "Email scheduled"}</DialogTitle>
+          <DialogDescription>
+            {job.title} at {job.company}
+          </DialogDescription>
+        </DialogHeader>
+        <DialogBody className="flex flex-col gap-4 py-4">
+          <SectionMessage appearance="success" title={`Scheduled for ${formatSendAt(scheduled.sendAt)}`}>
+            It&apos;s waiting as a draft in your Gmail Drafts and will be sent to {scheduled.recipient} at that time. Edits
+            you make to the draft in Gmail are what gets sent. Change or cancel it under Jobs &rarr; Emails.
+          </SectionMessage>
+        </DialogBody>
+        <DialogFooter>
+          <Button variant="primary" onClick={onClose}>
+            Done
+          </Button>
+        </DialogFooter>
+      </>
+    );
+  }
+
   if (step === "sent" && result) {
     const statusLabel = JOB_STATUSES.find((s) => s.id === result.jobStatus)?.label ?? result.jobStatus;
     return (
@@ -249,8 +312,10 @@ function Composer({ job, initialTo, followUp, onClose }: {
     return (
       <>
         <DialogHeader>
-          <DialogTitle>Review and send</DialogTitle>
-          <DialogDescription>This is exactly what will be sent. Nothing goes out until you press Send.</DialogDescription>
+          <DialogTitle>{when === "later" ? "Review and schedule" : "Review and send"}</DialogTitle>
+          <DialogDescription>
+            This is exactly what will be sent. Nothing goes out until you press {when === "later" ? "Schedule" : "Send"}.
+          </DialogDescription>
         </DialogHeader>
         <DialogBody className="flex flex-col gap-4 py-4">
           {send.error && (
@@ -258,6 +323,52 @@ function Composer({ job, initialTo, followUp, onClose }: {
               {errorMessage(send.error)}
             </SectionMessage>
           )}
+          {schedule.error && (
+            <SectionMessage appearance="error" title="The email wasn't scheduled">
+              {errorMessage(schedule.error)}
+            </SectionMessage>
+          )}
+
+          {/* When: send now, or schedule (it waits as a draft in the user's Gmail) */}
+          <div className="flex flex-col gap-3">
+            <div role="radiogroup" aria-label="When to send" className="flex gap-1.5">
+              <Button size="compact" role="radio" aria-checked={when === "now"} isSelected={when === "now"}
+                onClick={() => setWhen("now")} disabled={busy}>
+                <Send /> Send now
+              </Button>
+              <Button size="compact" role="radio" aria-checked={when === "later"} isSelected={when === "later"}
+                onClick={() => setWhen("later")} disabled={busy}>
+                <CalendarClock /> Schedule
+              </Button>
+            </div>
+            {when === "later" && (
+              <>
+                <div className="grid gap-2 sm:grid-cols-2">
+                  <Field htmlFor="send-date" label="Date" error={timeError ?? undefined}>
+                    <DatePicker id="send-date" value={sendDate}
+                      onChange={(next) => { setSendDate(next); setTimeError(null); }} disabled={busy} />
+                  </Field>
+                  <Field htmlFor="send-time" label="Time" hint={timeZoneName()}>
+                    <TimePicker id="send-time" value={sendTime} disabled={busy}
+                      onChange={(next) => { setSendTime(next); setTimeError(null); }} />
+                  </Field>
+                </div>
+                {!gmail.isPending && !canSchedule ? (
+                  <SectionMessage appearance="information" title="Allow scheduling in Gmail"
+                    actions={<Button size="compact" variant="primary" isLoading={allowScheduling.isPending}
+                      onClick={() => allowScheduling.mutate()}>Allow scheduling</Button>}>
+                    Scheduled emails wait as drafts in your Gmail until they&apos;re sent, so Google asks you once to let
+                    CareerPilot create drafts. You&apos;ll come back here afterwards.
+                  </SectionMessage>
+                ) : (
+                  <p className="text-xs text-subtle">
+                    Gmail&apos;s API can&apos;t use Gmail&apos;s own Scheduled folder, so this waits in your Gmail
+                    <strong> Drafts</strong> and CareerPilot sends it at the chosen time (within a few minutes).
+                  </p>
+                )}
+              </>
+            )}
+          </div>
 
           <dl className="rounded-sm border border-border text-sm">
             <div className="flex flex-col gap-0.5 border-b border-border px-3 py-2 sm:flex-row sm:gap-2">
@@ -286,20 +397,30 @@ function Composer({ job, initialTo, followUp, onClose }: {
             id="email-reviewed"
             checked={reviewed}
             onCheckedChange={(checked) => setReviewed(checked === true)}
-            disabled={send.isPending}
-            label={`I've checked this email and want to send it to ${recipient}`}
-            description={followUp
-              ? "Once Gmail accepts it, the email can't be recalled. It goes in the same Gmail thread as your earlier email."
-              : "Once Gmail accepts it, the email can't be recalled and this job moves to Applied."}
+            disabled={busy}
+            label={when === "later"
+              ? `I've checked this email and want it sent to ${recipient} at the chosen time`
+              : `I've checked this email and want to send it to ${recipient}`}
+            description={when === "later"
+              ? "You can change the time or cancel it until it's sent. When it's sent, this job moves to Applied."
+              : followUp
+                ? "Once Gmail accepts it, the email can't be recalled. It goes in the same Gmail thread as your earlier email."
+                : "Once Gmail accepts it, the email can't be recalled and this job moves to Applied."}
           />
         </DialogBody>
         <DialogFooter>
-          <Button variant="subtle" onClick={() => setStep("compose")} disabled={send.isPending}>
+          <Button variant="subtle" onClick={() => setStep("compose")} disabled={busy}>
             <ArrowLeft /> Back to editing
           </Button>
-          <Button variant="primary" disabled={!reviewed || !ready || !canSend} isLoading={send.isPending} onClick={confirmAndSend}>
-            <Send /> Send now
-          </Button>
+          {when === "later" ? (
+            <Button variant="primary" disabled={!reviewed || !ready || !canSchedule} isLoading={schedule.isPending} onClick={confirmAndSchedule}>
+              <CalendarClock /> Schedule
+            </Button>
+          ) : (
+            <Button variant="primary" disabled={!reviewed || !ready || !canSend} isLoading={send.isPending} onClick={confirmAndSend}>
+              <Send /> Send now
+            </Button>
+          )}
         </DialogFooter>
       </>
     );

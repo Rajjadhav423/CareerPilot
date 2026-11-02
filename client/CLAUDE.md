@@ -44,7 +44,8 @@ Existing UI components (check here first):
 `tabs` · `breadcrumbs` · `page-header` · `sticky-header` (keeps PageHeader + Tabs fixed under the top bar while the content scrolls, like Jira) · `section-message` (alerts) · `empty-state` · `spinner` · `text-field` ·
 `textarea` · `select` · `field` (label + hint + error) · `dialog` · `confirm-dialog` · `toggle` (settings that apply at once) · `pdf-pages` (PDF preview with selectable text and links) · `code-editor` (CodeMirror JSON editor themed with the tokens) · `dropdown-menu` · `tooltip` ·
 `date-picker` (`DatePicker` field + popover, `Calendar` month grid; values are "YYYY-MM-DD"; use it instead of
-`<input type="date">`, whose popup ignores our theme).
+`<input type="date">`, whose popup ignores our theme) · `time-picker` (`TimePicker`: type any time or pick a quarter hour;
+values are "HH:MM", 24-hour; use it instead of `<input type="time">`).
 
 How a UI component is written (follow `button.tsx` / `card.tsx`):
 - One file per component, named exports, a function component taking `React.ComponentProps<"element">`

@@ -2,6 +2,7 @@ import type { Metadata } from "next";
 import { Columns3, List, Mail } from "lucide-react";
 
 import { ROUTES } from "@/lib/routes";
+import { ScheduledEmailList } from "@/components/jobs/scheduled-email-list";
 import { SentEmailList } from "@/components/jobs/sent-email-list";
 import { ReplyTrackingNotice } from "@/components/jobs/job-email-status";
 import { PageHeader } from "@/components/ui/page-header";
@@ -37,6 +38,7 @@ export default function JobEmailsPage() {
       </StickyHeader>
 
       <ReplyTrackingNotice className="mb-4" />
+      <ScheduledEmailList className="mb-6" />
       <SentEmailList />
     </>
   );

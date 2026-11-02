@@ -13,6 +13,8 @@ export type GmailStatus = {
   canSend: boolean;
   /** Google granted gmail.metadata, so bounces and replies are tracked. */
   canTrack: boolean;
+  /** Google granted gmail.compose, so emails can be scheduled (they wait as Gmail drafts). */
+  canSchedule: boolean;
   googleEmail: string | null;
 };
 

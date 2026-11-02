@@ -66,8 +66,20 @@ function DroppableColumn({ status, count, children }: { status: JobStatus; count
 /** A job card that can be dragged to another column. */
 function DraggableJob({ job }: { job: Job }) {
   const { setNodeRef, attributes, listeners, isDragging } = useDraggable({ id: job.id, data: { status: job.status } });
+  /*
+   * React events bubble through portals: typing Space in the email dialog (opened from this card's ⋯ menu) or
+   * pressing the mouse inside it would otherwise reach these listeners and pick the card up. Only start a drag from
+   * the card itself: pointer events from inside its own DOM, and keys only when the card has focus (not its link or
+   * ⋯ button, whose Space/Enter must keep working).
+   */
+  const fromCard = (event: React.SyntheticEvent) => event.currentTarget.contains(event.target as Node);
+  const dragListeners = {
+    onMouseDown: (event: React.MouseEvent) => fromCard(event) && listeners?.onMouseDown?.(event),
+    onTouchStart: (event: React.TouchEvent) => fromCard(event) && listeners?.onTouchStart?.(event),
+    onKeyDown: (event: React.KeyboardEvent) => event.target === event.currentTarget && listeners?.onKeyDown?.(event),
+  };
   return (
-    <div ref={setNodeRef} {...attributes} {...listeners} className="cursor-grab touch-manipulation rounded-lg outline-none focus-visible:ring-2 focus-visible:ring-focus">
+    <div ref={setNodeRef} {...attributes} {...dragListeners} className="cursor-grab touch-manipulation rounded-lg outline-none focus-visible:ring-2 focus-visible:ring-focus">
       <JobCard job={job} isDragging={isDragging} />
     </div>
   );
