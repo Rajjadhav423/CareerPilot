@@ -4,6 +4,7 @@ const nextConfig: NextConfig = {
   /* config options here */
   experimental: {
     agentFeedback: true,
+    agentUpgrade: "security",
     // The @tailwindcss/turbopack loader doesn't invalidate this cache when globals.css changes,
     // so CSS edits stayed stale even after restarting `pnpm dev`.
     turbopackFileSystemCacheForDev: false,
