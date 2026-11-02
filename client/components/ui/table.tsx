@@ -1,30 +1,28 @@
 import { cn } from "@/lib/utils";
 
 /**
- * Atlassian Dynamic Table look (values from @atlaskit/dynamic-table): no outer frame, a 2px rule under the header and
- * under the last row, no lines between rows, 4px × 8px cell padding with the first and last columns flush to the
- * edges, a subtle hover and the blue selected state. The wrapper scrolls horizontally on small screens.
+ * The one table look across the app, Jira's List view: a framed grid (8px radius) with a sunken header, column
+ * dividers in the header, a line between rows, 40px rows with 12px side padding, a subtle hover and the blue selected
+ * state. The frame scrolls horizontally on small screens.
  */
 function Table({ className, ...props }: React.ComponentProps<"table">) {
   return (
-    <div data-slot="table-container" className="relative w-full overflow-x-auto">
-      <table data-slot="table" className={cn("w-full caption-bottom border-b-2 border-border text-sm", className)} {...props} />
+    <div data-slot="table-container" className="relative w-full overflow-x-auto rounded-lg border border-border bg-surface">
+      <table
+        data-slot="table"
+        className={cn("w-full caption-bottom border-separate border-spacing-0 text-sm", className)}
+        {...props}
+      />
     </div>
   );
 }
 
 function TableHeader({ className, ...props }: React.ComponentProps<"thead">) {
-  return (
-    <thead
-      data-slot="table-header"
-      className={cn("[&_tr]:border-b-2 [&_tr]:border-border [&_tr]:hover:bg-transparent", className)}
-      {...props}
-    />
-  );
+  return <thead data-slot="table-header" className={cn("[&_tr]:hover:bg-transparent", className)} {...props} />;
 }
 
 function TableBody({ className, ...props }: React.ComponentProps<"tbody">) {
-  return <tbody data-slot="table-body" className={className} {...props} />;
+  return <tbody data-slot="table-body" className={cn("[&_tr:last-child>td]:border-b-0", className)} {...props} />;
 }
 
 function TableRow({ className, ...props }: React.ComponentProps<"tr">) {
@@ -46,7 +44,7 @@ function TableHead({ className, ...props }: React.ComponentProps<"th">) {
     <th
       data-slot="table-head"
       className={cn(
-        "px-2 py-1 text-left align-middle text-xs font-bold whitespace-nowrap text-subtle first:pl-0 last:pr-0",
+        "h-10 border-b border-border bg-surface-sunken px-3 text-left align-middle text-xs font-bold whitespace-nowrap text-subtle not-last:border-r",
         className,
       )}
       {...props}
@@ -55,7 +53,7 @@ function TableHead({ className, ...props }: React.ComponentProps<"th">) {
 }
 
 function TableCell({ className, ...props }: React.ComponentProps<"td">) {
-  return <td data-slot="table-cell" className={cn("px-2 py-1 align-middle first:pl-0 last:pr-0", className)} {...props} />;
+  return <td data-slot="table-cell" className={cn("h-10 border-b border-border px-3 align-middle", className)} {...props} />;
 }
 
 export { Table, TableHeader, TableBody, TableRow, TableHead, TableCell };

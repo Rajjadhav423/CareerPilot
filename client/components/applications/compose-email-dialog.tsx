@@ -2,6 +2,7 @@
 
 import { useEffect, useRef, useState } from "react";
 import Link from "next/link";
+import { useUser } from "@clerk/nextjs";
 import { useQueryClient } from "@tanstack/react-query";
 import { ArrowLeft, Paperclip, Send } from "lucide-react";
 
@@ -38,13 +39,38 @@ import { TextField } from "@/components/ui/text-field";
 import { Toggle } from "@/components/ui/toggle";
 import { Textarea } from "@/components/ui/textarea";
 
+import { EmailStatusLozenge } from "./email-status";
+
 type ComposeEmailDialogProps = {
   job: Job;
   open: boolean;
   onOpenChange: (open: boolean) => void;
   /** Recipient to start with, e.g. the HR email found when the job was added. Defaults to one in the job's notes. */
   initialTo?: string;
+  /** Write a follow-up to this earlier email instead of a new application: same thread, "Re:" subject */
+  followUp?: FollowUpOf;
 };
+
+/** The earlier email a follow-up answers. */
+export type FollowUpOf = { id: string; recipient: string; subject: string; sentAt: string };
+
+/** "Re: <subject>", without stacking "Re: Re:". */
+export const replySubject = (subject: string) => (/^re:/i.test(subject.trim()) ? subject.trim() : `Re: ${subject.trim()}`);
+
+function followUpBody(job: Job, followUp: FollowUpOf, name: string | null | undefined) {
+  const date = new Intl.DateTimeFormat("en-GB", { day: "numeric", month: "long" }).format(new Date(followUp.sentAt));
+  return [
+    "Hi,",
+    "",
+    `I'm following up on my application for the ${job.title} role at ${job.company}, which I sent on ${date}. `
+      + "I'm still very interested in the position and would be glad to share anything else you need.",
+    "",
+    "Thank you for your time.",
+    "",
+    "Best regards,",
+    ...(name ? [name] : []),
+  ].join("\n");
+}
 
 /** "HR email: hr@acme.com" saved in the job's notes when it was added from a post. */
 export function contactEmailOf(job: Job): string {
@@ -56,11 +82,18 @@ export function contactEmailOf(job: Job): string {
  * Write an application email for one job: pick a template, edit the filled-in draft, review, then send from
  * the user's Gmail. Edits only change this email, never the saved template.
  */
-export function ComposeEmailDialog({ job, open, onOpenChange, initialTo }: ComposeEmailDialogProps) {
+export function ComposeEmailDialog({ job, open, onOpenChange, initialTo, followUp }: ComposeEmailDialogProps) {
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent className="max-w-2xl">
-        {open && <Composer job={job} initialTo={initialTo ?? contactEmailOf(job)} onClose={() => onOpenChange(false)} />}
+        {open && (
+          <Composer
+            job={job}
+            initialTo={followUp?.recipient ?? initialTo ?? contactEmailOf(job)}
+            followUp={followUp}
+            onClose={() => onOpenChange(false)}
+          />
+        )}
       </DialogContent>
     </Dialog>
   );
@@ -73,7 +106,10 @@ function errorMessage(error: unknown) {
   return error instanceof ApiError ? error.message : "Unexpected error.";
 }
 
-function Composer({ job, initialTo, onClose }: { job: Job; initialTo: string; onClose: () => void }) {
+function Composer({ job, initialTo, followUp, onClose }: {
+  job: Job; initialTo: string; followUp?: FollowUpOf; onClose: () => void;
+}) {
+  const { user } = useUser();
   const queryClient = useQueryClient();
   const templates = useTemplates();
   const gmail = useGmailStatus();
@@ -85,12 +121,15 @@ function Composer({ job, initialTo, onClose }: { job: Job; initialTo: string; on
   const [step, setStep] = useState<Step>("compose");
   const [templateId, setTemplateId] = useState<string | null>(null);
   const [composed, setComposed] = useState<ComposedEmail | null>(null);
-  const [draft, setDraft] = useState<Draft>({ to: initialTo, subject: "", body: "" });
+  const [draft, setDraft] = useState<Draft>(() => followUp
+    ? { to: initialTo, subject: replySubject(followUp.subject), body: followUpBody(job, followUp, user?.fullName) }
+    : { to: initialTo, subject: "", body: "" });
   const [toTouched, setToTouched] = useState(false);
   const [reviewed, setReviewed] = useState(false);
   const [result, setResult] = useState<SendEmailResult | null>(null);
   // Attach the resume chosen under "Resume link" (the same Drive PDF) to the email
-  const [attach, setAttach] = useState(true);
+  // A follow-up doesn't resend the resume unless the user turns it on
+  const [attach, setAttach] = useState(!followUp);
 
   const { mutate: runCompose } = compose;
 
@@ -111,7 +150,8 @@ function Composer({ job, initialTo, onClose }: { job: Job; initialTo: string; on
   useEffect(() => {
     if (started.current) return;
     started.current = true;
-    loadTemplate(null);
+    // A follow-up starts from its own short draft; the user can still pick a template
+    if (!followUp) loadTemplate(null);
     // eslint-disable-next-line react-hooks/exhaustive-deps -- once, when the dialog opens
   }, []);
 
@@ -165,7 +205,7 @@ function Composer({ job, initialTo, onClose }: { job: Job; initialTo: string; on
 
   function confirmAndSend() {
     send.mutate(
-      { to: recipient, subject: draft.subject.trim(), body: draft.body, templateId, driveDocumentId: attached?.id ?? null, confirmed: true },
+      { to: recipient, subject: draft.subject.trim(), body: draft.body, templateId, driveDocumentId: attached?.id ?? null, replyToId: followUp?.id ?? null, confirmed: true },
       {
         onSuccess: (sentResult) => {
           setResult(sentResult);
@@ -186,7 +226,7 @@ function Composer({ job, initialTo, onClose }: { job: Job; initialTo: string; on
     return (
       <>
         <DialogHeader>
-          <DialogTitle>Email sent</DialogTitle>
+          <DialogTitle>{followUp ? "Follow-up sent" : "Email sent"}</DialogTitle>
           <DialogDescription>
             {job.title} at {job.company}
           </DialogDescription>
@@ -248,7 +288,9 @@ function Composer({ job, initialTo, onClose }: { job: Job; initialTo: string; on
             onCheckedChange={(checked) => setReviewed(checked === true)}
             disabled={send.isPending}
             label={`I've checked this email and want to send it to ${recipient}`}
-            description="Once Gmail accepts it, the email can't be recalled and this job moves to Applied."
+            description={followUp
+              ? "Once Gmail accepts it, the email can't be recalled. It goes in the same Gmail thread as your earlier email."
+              : "Once Gmail accepts it, the email can't be recalled and this job moves to Applied."}
           />
         </DialogBody>
         <DialogFooter>
@@ -278,7 +320,7 @@ function Composer({ job, initialTo, onClose }: { job: Job; initialTo: string; on
       }}
     >
       <DialogHeader>
-        <DialogTitle>Write application email</DialogTitle>
+        <DialogTitle>{followUp ? "Write a follow-up" : "Write application email"}</DialogTitle>
         <DialogDescription>
           {job.title} at {job.company}
         </DialogDescription>
@@ -291,8 +333,9 @@ function Composer({ job, initialTo, onClose }: { job: Job; initialTo: string; on
           <SectionMessage appearance="information" title="You've already emailed about this job">
             <ul className="flex flex-col gap-0.5">
               {sent.data.slice(0, 3).map((email) => (
-                <li key={email.id} className="break-words">
-                  To {email.recipient}, {formatRelativeTime(email.sentAt)}
+                <li key={email.id} className="flex flex-wrap items-center gap-2 break-words">
+                  <span>To {email.recipient}, {formatRelativeTime(email.sentAt)}</span>
+                  <EmailStatusLozenge email={email} />
                 </li>
               ))}
             </ul>

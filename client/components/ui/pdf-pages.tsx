@@ -38,7 +38,7 @@ function PdfPages({ pdf, label = "Document", className, onTextSelect }: PdfPages
       .then((pdfjs) => pdfjs.getDocument({ data: base64ToBytes(pdf) }).promise)
       .then((next) => {
         loaded = next;
-        if (cancelled) return void next.destroy();
+        if (cancelled) return void next.loadingTask.destroy();
         setFailed(false);
         setDoc(next);
       })
@@ -46,7 +46,7 @@ function PdfPages({ pdf, label = "Document", className, onTextSelect }: PdfPages
     return () => {
       cancelled = true;
       // The next PDF replaces this one; free its memory once it's no longer shown
-      if (loaded) setTimeout(() => void loaded?.destroy(), 0);
+      if (loaded) setTimeout(() => void loaded?.loadingTask.destroy(), 0);
     };
   }, [pdf]);
 
@@ -153,7 +153,8 @@ function PdfPage({ doc, number, label }: { doc: PDFDocumentProxy; number: number
       setLinks(annotations
         .filter((a) => a.subtype === "Link" && typeof a.url === "string" && SAFE_LINK.test(a.url))
         .map((a) => {
-          const [x1, y1, x2, y2] = viewport.convertToViewportRectangle(a.rect) as [number, number, number, number];
+          const [x1, y1] = viewport.convertToViewportPoint(a.rect[0], a.rect[1]) as [number, number];
+          const [x2, y2] = viewport.convertToViewportPoint(a.rect[2], a.rect[3]) as [number, number];
           return { url: a.url as string, left: Math.min(x1, x2), top: Math.min(y1, y2), width: Math.abs(x2 - x1), height: Math.abs(y2 - y1) };
         }));
     })().catch(() => {

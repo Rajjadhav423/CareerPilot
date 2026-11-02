@@ -269,9 +269,14 @@ export function DriveDocuments() {
             table={table}
             label="Documents"
             empty={
-              <Card>
-                <EmptyState icon={<Search />} title="No matching documents" description={`Nothing is named like “${globalFilter}”.`} />
-              </Card>
+              <p className="rounded-lg border border-border py-10 text-center text-sm text-subtle">
+                No documents match your search.
+              </p>
+            }
+            footer={
+              <p className="mt-2 text-right text-sm text-subtle">
+                {table.getRowModel().rows.length} of {documents.data.length}
+              </p>
             }
             renderCard={(row) => (
               <div className="flex items-start gap-3">

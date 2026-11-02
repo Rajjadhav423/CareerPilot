@@ -11,6 +11,8 @@ export type GmailStatus = {
   connected: boolean;
   /** Google granted the gmail.send permission. */
   canSend: boolean;
+  /** Google granted gmail.metadata, so bounces and replies are tracked. */
+  canTrack: boolean;
   googleEmail: string | null;
 };
 

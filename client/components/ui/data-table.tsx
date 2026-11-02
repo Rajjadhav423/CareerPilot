@@ -25,6 +25,8 @@ type DataTableProps<TFeatures extends TableFeatures, TData extends RowData> = {
   /** Accessible name for the table and the card list. */
   label: string;
   className?: string;
+  /** Shown under the table and card list, e.g. a count or a "+ Create" row. */
+  footer?: React.ReactNode;
 };
 
 /**
@@ -33,7 +35,7 @@ type DataTableProps<TFeatures extends TableFeatures, TData extends RowData> = {
  * Columns opt into sorting through the table's sorting feature; their headers become buttons.
  */
 function DataTable<TFeatures extends TableFeatures, TData extends RowData>(
-  { table, renderCard, empty, label, className }: DataTableProps<TFeatures, TData>,
+  { table, renderCard, empty, label, className, footer }: DataTableProps<TFeatures, TData>,
 ) {
   const rows = table.getRowModel().rows;
 
@@ -108,6 +110,8 @@ function DataTable<TFeatures extends TableFeatures, TData extends RowData>(
           </Table>
         </div>
       )}
+
+      {footer}
     </div>
   );
 }

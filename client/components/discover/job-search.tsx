@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useRef, useState } from "react";
-import { RefreshCw, Search, SearchX } from "lucide-react";
+import { Mail, RefreshCw, Search, SearchX } from "lucide-react";
 import { useAuth } from "@clerk/nextjs";
 
 import { ApiError } from "@/lib/api/client";
@@ -44,20 +44,22 @@ function today() {
 
 type Result = { data: DiscoverResponse; error: null } | { data: null; error: string };
 
-async function load(params: DiscoverParams): Promise<Result> {
+async function load(params: DiscoverParams, getToken: () => Promise<string | null>): Promise<Result> {
   try {
-    return { data: await discoverJobs(params), error: null };
+    return { data: await discoverJobs(params, await getToken()), error: null };
   } catch (error) {
     return { data: null, error: error instanceof ApiError ? error.message : "Unexpected error." };
   }
 }
 
 export function JobSearch() {
-  const { isLoaded } = useAuth();
+  const { isLoaded, getToken } = useAuth();
   const [query, setQuery] = useState("");
   // Where: Anywhere, Remote or a country; city only within a country
   const [where, setWhere] = useState(ANYWHERE);
   const [city, setCity] = useState("");
+  // Only jobs whose post gives an HR email (to apply by email)
+  const [hasEmail, setHasEmail] = useState(false);
   // Posted: any time, a preset (24h, 3d, 7d, 30d) or a custom from/to range
   const [posted, setPosted] = useState(ANY_TIME);
   const [from, setFrom] = useState("");
@@ -72,18 +74,18 @@ export function JobSearch() {
   useEffect(() => {
     // Wait for Clerk: before it loads there is no session token yet.
     if (!isLoaded) return;
-    load({ limit: PAGE_SIZE }).then((next) => {
+    load({ limit: PAGE_SIZE }, getToken).then((next) => {
       if (latestRequest.current === 0) {
         setResult(next);
         setLoading(false);
       }
     });
-  }, [isLoaded]);
+  }, [isLoaded, getToken]);
 
   function run(params: DiscoverParams) {
     const requestId = ++latestRequest.current;
     setLoading(true);
-    load(params).then((next) => {
+    load(params, getToken).then((next) => {
       if (requestId !== latestRequest.current) return;
       setResult(next);
       setLoading(false);
@@ -92,7 +94,7 @@ export function JobSearch() {
 
   /** Current filters as request parameters */
   function params(overrides: Partial<{
-    role: TechRole | null; where: string; city: string; posted: string; from: string; to: string; limit: number; refresh: boolean;
+    role: TechRole | null; where: string; city: string; posted: string; from: string; to: string; hasEmail: boolean; limit: number; refresh: boolean;
   }> = {}): DiscoverParams {
     const w = overrides.where ?? where;
     const c = overrides.city ?? city;
@@ -107,6 +109,7 @@ export function JobSearch() {
       posted: p && !custom ? (p as PostedPreset) : null,
       from: custom ? (overrides.from ?? from) || null : null,
       to: custom ? (overrides.to ?? to) || null : null,
+      hasEmail: overrides.hasEmail ?? hasEmail,
       limit: overrides.limit ?? PAGE_SIZE,
       refresh: overrides.refresh ?? false,
     };
@@ -135,6 +138,12 @@ export function JobSearch() {
     setCity(next);
     setLimit(PAGE_SIZE);
     run(params({ city: next }));
+  }
+
+  function toggleHasEmail() {
+    setHasEmail(!hasEmail);
+    setLimit(PAGE_SIZE);
+    run(params({ hasEmail: !hasEmail }));
   }
 
   function selectPosted(next: string) {
@@ -232,9 +241,14 @@ export function JobSearch() {
         // Narrow: one row you swipe sideways. Wide: wraps onto several lines.
         <div
           role="group"
-          aria-label="Filter by role"
+          aria-label="Filter by HR email and role"
           className="flex gap-1.5 overflow-x-auto pb-1 [scrollbar-width:none] @2xl:flex-wrap @2xl:overflow-visible @2xl:pb-0 [&>button]:shrink-0"
         >
+          <Button size="compact" isSelected={hasEmail} aria-pressed={hasEmail} onClick={toggleHasEmail}
+            title="Only jobs whose post gives an HR email, so you can apply by email">
+            <Mail /> Has HR email <span className="text-subtlest">{formatNumber(data.facets.withEmail)}</span>
+          </Button>
+          <span aria-hidden className="mx-1 w-px shrink-0 self-stretch bg-border" />
           <Button size="compact" isSelected={role === null} onClick={() => selectRole(null)}>
             All tech <span className="text-subtlest">{formatNumber(allTechCount)}</span>
           </Button>
@@ -258,7 +272,7 @@ export function JobSearch() {
           <p>
             Showing <strong className="text-foreground">{formatNumber(data.jobs.length)}</strong> of{" "}
             <strong className="text-foreground">{formatNumber(data.total)}</strong>{" "}
-            {role ? roleLabel[role].toLowerCase() : "tech"} jobs{where === REMOTE ? " (remote)" : where ? ` in ${city || where}` : ""}
+            {role ? roleLabel[role].toLowerCase() : "tech"} jobs{hasEmail ? " with an HR email" : ""}{where === REMOTE ? " (remote)" : where ? ` in ${city || where}` : ""}
             {posted && posted !== CUSTOM ? ` · ${POSTED_PRESETS.find((p) => p.id === posted)?.label.toLowerCase()}` : ""}
             {posted === CUSTOM && (from || to) ? ` · ${from || "…"} to ${to || "today"}` : ""} from{" "}
             {okBoards} sources · updated{" "}

@@ -8,6 +8,8 @@ import { GOOGLE_SCOPES, requestGoogleScopes } from "@/lib/google/request-scopes"
 
 /** The Gmail permission CareerPilot asks for: send email as the user (it can't read the inbox). */
 export const GMAIL_SEND_SCOPE = GOOGLE_SCOPES.gmailSend;
+/** Optional: read message headers (not content) so CareerPilot can show bounces and replies. */
+export const GMAIL_METADATA_SCOPE = GOOGLE_SCOPES.gmailMetadata;
 
 export const GMAIL_STATUS_KEY = ["gmail-status"] as const;
 
@@ -32,6 +34,17 @@ export function useConnectGmail() {
     mutationFn: async () => {
       if (!user) throw new Error("You're not signed in.");
       await requestGoogleScopes(user, [GMAIL_SEND_SCOPE], window.location.href);
+    },
+  });
+}
+
+/** Asks Google for the headers-only permission used to track bounces and replies (keeps sending allowed). */
+export function useAllowReplyTracking() {
+  const { user } = useUser();
+  return useMutation({
+    mutationFn: async () => {
+      if (!user) throw new Error("You're not signed in.");
+      await requestGoogleScopes(user, [GMAIL_SEND_SCOPE, GMAIL_METADATA_SCOPE], window.location.href);
     },
   });
 }

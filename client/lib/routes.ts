@@ -10,6 +10,7 @@ export const ROUTES = {
   discover: "/dashboard/discover",
   jobs: "/dashboard/jobs",
   jobsList: "/dashboard/jobs/list",
+  jobsEmails: "/dashboard/jobs/emails",
   templates: "/dashboard/templates",
   profile: "/dashboard/profile",
   resumes: "/dashboard/resumes",

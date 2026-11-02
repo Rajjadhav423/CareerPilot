@@ -1,12 +1,14 @@
 "use client";
 
+import { useState } from "react";
 import Link from "next/link";
-import { BookmarkPlus, Check } from "lucide-react";
+import { BookmarkPlus, Check, Mail } from "lucide-react";
 
 import type { JobPosting } from "@/lib/api/discover";
-import type { CreateJobInput } from "@/lib/api/jobs";
+import type { CreateJobInput, Job } from "@/lib/api/jobs";
 import { useCreateJob, useJobs } from "@/lib/jobs/use-jobs";
 import { ROUTES } from "@/lib/routes";
+import { ComposeEmailDialog } from "@/components/applications/compose-email-dialog";
 import { Button } from "@/components/ui/button";
 
 function toJobInput(posting: JobPosting): CreateJobInput {
@@ -18,6 +20,8 @@ function toJobInput(posting: JobPosting): CreateJobInput {
     jobUrl: posting.url,
     source: posting.source.toUpperCase(),
     externalId: posting.id,
+    // Read back by contactEmailOf() when composing the application email
+    notes: posting.contactEmail ? `HR email: ${posting.contactEmail}` : null,
   };
 }
 
@@ -46,5 +50,47 @@ export function SaveJobButton({ posting }: { posting: JobPosting }) {
     >
       <BookmarkPlus /> {saveJob.isError ? "Retry" : "Save"}
     </Button>
+  );
+}
+
+/**
+ * For postings that give an HR email: saves the job (if it isn't on the board yet) and opens the application
+ * email to that address. Renders nothing when the post has no email.
+ */
+export function EmailHrButton({ posting }: { posting: JobPosting }) {
+  const { data: jobs } = useJobs();
+  const saveJob = useCreateJob();
+  const [job, setJob] = useState<Job | null>(null);
+  if (!posting.contactEmail) return null;
+
+  async function open() {
+    const existing = jobs?.find((saved) => saved.externalId === posting.id);
+    try {
+      setJob(existing ?? (await saveJob.mutateAsync(toJobInput(posting))));
+    } catch {
+      // The button shows "Retry"
+    }
+  }
+
+  return (
+    <>
+      <Button
+        size="compact"
+        variant="primary"
+        isLoading={saveJob.isPending}
+        onClick={open}
+        title={saveJob.isError ? "Couldn't save the job. Try again." : `Save and email ${posting.contactEmail}`}
+      >
+        <Mail /> {saveJob.isError ? "Retry" : "Email HR"}
+      </Button>
+      {job && (
+        <ComposeEmailDialog
+          job={job}
+          open
+          onOpenChange={(next) => !next && setJob(null)}
+          initialTo={posting.contactEmail}
+        />
+      )}
+    </>
   );
 }

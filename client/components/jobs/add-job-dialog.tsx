@@ -2,9 +2,10 @@
 
 import { useRef, useState } from "react";
 import { Link2, Loader2, Mail, Sparkles } from "lucide-react";
+import { useAuth } from "@clerk/nextjs";
 
 import { ApiError } from "@/lib/api/client";
-import type { Job, WorkMode } from "@/lib/api/jobs";
+import { importJobFromUrl, type Job, type WorkMode } from "@/lib/api/jobs";
 import { isValidEmailAddress } from "@/lib/email/placeholders";
 import { useCreateJob } from "@/lib/jobs/use-jobs";
 import { ComposeEmailDialog } from "@/components/applications/compose-email-dialog";
@@ -72,6 +73,7 @@ export function AddJobDialog({ open, onOpenChange }: AddJobDialogProps) {
   /** The job just saved with "Add & email HR": its email opens next, to this address */
   const [emailJob, setEmailJob] = useState<{ job: Job; to: string } | null>(null);
   const createJob = useCreateJob();
+  const { getToken } = useAuth();
 
   function update<K extends keyof FormState>(key: K, value: FormState[K]) {
     setForm((current) => ({ ...current, [key]: value }));
@@ -112,27 +114,13 @@ export function AddJobDialog({ open, onOpenChange }: AddJobDialogProps) {
     scrapeAbortRef.current = controller;
 
     try {
-      const resp = await fetch("/api/scrape-job", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ url }),
-        signal: controller.signal,
-      });
-      const data = await resp.json() as {
-        title?: string; company?: string; location?: string;
-        workMode?: string; description?: string; jobUrl?: string; hrEmail?: string; ai?: boolean; error?: string;
-      };
-      if (!resp.ok) {
-        setScrapeError(data.error ?? `Server responded with ${resp.status}.`);
-        setScrapeState("error");
-        return;
-      }
+      const data = await importJobFromUrl(url, await getToken(), controller.signal);
       // Auto-fill the form — only overwrite blank fields so user data isn't lost
       setForm((prev) => ({
         title: prev.title || data.title || "",
         company: prev.company || data.company || "",
         location: prev.location || data.location || "",
-        workMode: (prev.workMode || (["ONSITE", "HYBRID", "REMOTE"].includes(data.workMode ?? "") ? data.workMode as WorkMode : "")) as "" | WorkMode,
+        workMode: prev.workMode || data.workMode,
         jobUrl: prev.jobUrl || data.jobUrl || url,
         description: prev.description || data.description || "",
         hrEmail: prev.hrEmail || data.hrEmail || "",
@@ -141,7 +129,7 @@ export function AddJobDialog({ open, onOpenChange }: AddJobDialogProps) {
       setScrapeState("done");
     } catch (err) {
       if (err instanceof DOMException && err.name === "AbortError") return;
-      setScrapeError("Network error — could not reach the server.");
+      setScrapeError(err instanceof ApiError ? err.message : "Network error — could not reach the server.");
       setScrapeState("error");
     }
   }

@@ -51,6 +51,25 @@ export function createJob(input: CreateJobInput, token: string | null) {
   return apiFetch<Job>("/api/v1/jobs", { method: "POST", json: input, token });
 }
 
+/** Job details read from a posting link (not saved). Mirrors the backend's ImportedJob. */
+export type ImportedJob = {
+  title: string;
+  company: string;
+  location: string;
+  workMode: WorkMode | "";
+  description: string;
+  jobUrl: string;
+  /** HR / recruiter email found in the post ("" when none) */
+  hrEmail: string;
+  /** True when the AI read the page, false for the rule-based fallback */
+  ai: boolean;
+};
+
+/** The backend fetches the page (public addresses only) and extracts the job. */
+export function importJobFromUrl(url: string, token: string | null, signal?: AbortSignal) {
+  return apiFetch<ImportedJob>("/api/v1/jobs/import-from-url", { method: "POST", json: { url }, token, signal });
+}
+
 export function updateJob(id: string, input: UpdateJobInput, token: string | null) {
   return apiFetch<Job>(`/api/v1/jobs/${id}`, { method: "PATCH", json: input, token });
 }

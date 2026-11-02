@@ -1,9 +1,9 @@
-import { ApiError } from "./client";
+import { apiFetch } from "./client";
 
-/** Mirrors com.careerpilot.backend.discovery.WorkplaceType */
+/** Mirrors the backend's discovery WorkplaceType */
 export type WorkplaceType = "ONSITE" | "HYBRID" | "REMOTE" | "UNSPECIFIED";
 
-/** Mirrors com.careerpilot.backend.discovery.TechRole */
+/** Mirrors the backend's discovery TechRole */
 export type TechRole =
   | "BACKEND"
   | "FRONTEND"
@@ -28,7 +28,7 @@ export const TECH_ROLES: { id: TechRole; label: string }[] = [
   { id: "GENERAL", label: "General" },
 ];
 
-/** Mirrors com.careerpilot.backend.discovery.JobPosting */
+/** Mirrors the backend's discovery JobPosting */
 export type JobPosting = {
   id: string;
   title: string;
@@ -59,14 +59,15 @@ export type SourceStatus = {
   error: string | null;
 };
 
-/** Mirrors com.careerpilot.backend.discovery.DiscoverResponse */
+/** Mirrors the backend's discovery DiscoverResponse */
 export type DiscoverResponse = {
   jobs: JobPosting[];
   total: number;
   /** Matches per role for the current query/location, ignoring the role filter. */
   roleCounts: Partial<Record<TechRole, number>>;
   /** Countries (and cities of the chosen country) with job counts, for the location filters */
-  facets: { countries: Facet[]; cities: Facet[]; remote: number };
+  /** withEmail: matches (ignoring the email filter) whose post gives a hiring email */
+  facets: { countries: Facet[]; cities: Facet[]; remote: number; withEmail: number };
   fetchedAt: string;
   sources: SourceStatus[];
 };
@@ -100,36 +101,26 @@ export type DiscoverParams = {
   from?: string | null;
   to?: string | null;
   limit?: number;
-  /** Re-fetch the free sources now instead of using the cache. */
+  /** Only jobs whose post gives a hiring email */
+  hasEmail?: boolean;
+  /** Re-fetch the sources now instead of using the cache. */
   refresh?: boolean;
 };
 
-/**
- * Find jobs is served by the Next.js route app/api/discover/jobs (same origin, Clerk session cookie): job sources
- * are fetched and cached there. The Spring API's /api/v1/discover/jobs still exists but isn't used by the app.
- */
+/** Job sources are fetched and cached by the backend and shared by all users; the search runs on that cache. */
 export async function discoverJobs({
-  q = "", location = "", role, country, city, remote = false, posted, from, to, limit = 100, refresh = false,
-}: DiscoverParams) {
+  q = "", location = "", role, country, city, remote = false, posted, from, to, hasEmail = false, limit = 100, refresh = false,
+}: DiscoverParams, token: string | null) {
   const params = new URLSearchParams({ q, location, limit: String(limit), refresh: String(refresh) });
   if (role) params.set("role", role);
   if (country) params.set("country", country);
   if (country && city) params.set("city", city);
   if (remote) params.set("remote", "true");
+  if (hasEmail) params.set("hasEmail", "true");
   if (posted) params.set("posted", posted);
   else {
     if (from) params.set("from", from);
     if (to) params.set("to", to);
   }
-  let response: Response;
-  try {
-    response = await fetch(`/api/discover/jobs?${params}`, { headers: { Accept: "application/json" }, cache: "no-store" });
-  } catch {
-    throw new ApiError("Couldn't reach CareerPilot. Check your connection.", 0);
-  }
-  if (!response.ok) {
-    const problem = (await response.json().catch(() => ({}))) as { detail?: string; code?: string };
-    throw new ApiError(problem.detail ?? `Request failed with status ${response.status}.`, response.status, problem.code);
-  }
-  return (await response.json()) as DiscoverResponse;
+  return apiFetch<DiscoverResponse>(`/api/v1/discover/jobs?${params}`, { token, cache: "no-store" });
 }

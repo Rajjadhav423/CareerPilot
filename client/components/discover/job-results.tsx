@@ -1,10 +1,23 @@
+"use client";
+
+import { useState } from "react";
 import { ExternalLink } from "lucide-react";
+import {
+  createColumnHelper,
+  createSortedRowModel,
+  rowSortingFeature,
+  sortFn_alphanumeric,
+  sortFn_datetime,
+  tableFeatures,
+  useTable,
+  type SortingState,
+} from "@tanstack/react-table";
 
 import { TECH_ROLES, type JobPosting, type TechRole, type WorkplaceType } from "@/lib/api/discover";
 import { formatRelativeTime } from "@/lib/format";
 import { Lozenge } from "@/components/ui/lozenge";
-import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
-import { SaveJobButton } from "./save-job-button";
+import { DataTable, type DataTableColumnMeta } from "@/components/ui/data-table";
+import { EmailHrButton, SaveJobButton } from "./save-job-button";
 
 const workplaceLozenge: Record<WorkplaceType, { label: string; appearance: "new" | "inprogress" | "default" } | null> = {
   REMOTE: { label: "Remote", appearance: "new" },
@@ -34,86 +47,123 @@ function WorkplaceLozenge({ type }: { type: WorkplaceType }) {
   return workplace ? <Lozenge appearance={workplace.appearance}>{workplace.label}</Lozenge> : null;
 }
 
-/**
- * Card list when the content area is narrow (phones, tablets, sidebar open),
- * table when it's wide. Uses container queries, so it reacts to the space
- * actually available rather than the screen width.
- */
+const features = tableFeatures({
+  rowSortingFeature,
+  sortedRowModel: createSortedRowModel(),
+  sortFns: { alphanumeric: sortFn_alphanumeric, datetime: sortFn_datetime },
+});
+const helper = createColumnHelper<typeof features, JobPosting>();
+
+const columns = helper.columns([
+  helper.accessor("title", {
+    header: "Job",
+    sortFn: "alphanumeric",
+    cell: ({ row }) => (
+      <>
+        <JobLink job={row.original} />
+        {row.original.department && <p className="line-clamp-2 text-xs text-subtlest">{row.original.department}</p>}
+      </>
+    ),
+    meta: { cellClassName: "max-w-md" } satisfies DataTableColumnMeta,
+  }),
+  helper.accessor("company", {
+    header: "Company",
+    sortFn: "alphanumeric",
+    cell: ({ row }) => (
+      <>
+        {row.original.company}
+        <p className="text-xs text-subtlest">{sourceLabel(row.original)}</p>
+        <ContactEmail job={row.original} />
+      </>
+    ),
+    meta: { cellClassName: "whitespace-nowrap" } satisfies DataTableColumnMeta,
+  }),
+  helper.accessor((job) => roleLabel[job.techRole], {
+    id: "role",
+    header: "Role",
+    sortFn: "alphanumeric",
+    cell: ({ row }) => <Lozenge>{roleLabel[row.original.techRole]}</Lozenge>,
+    meta: { cellClassName: "whitespace-nowrap" } satisfies DataTableColumnMeta,
+  }),
+  helper.accessor((job) => job.location ?? "", {
+    id: "location",
+    header: "Location",
+    sortFn: "alphanumeric",
+    cell: ({ row }) => row.original.location ?? "—",
+    meta: { cellClassName: "max-w-56 text-subtle" } satisfies DataTableColumnMeta,
+  }),
+  helper.accessor((job) => workplaceLozenge[job.workplaceType]?.label ?? "", {
+    id: "workMode",
+    header: "Work mode",
+    sortFn: "alphanumeric",
+    cell: ({ row }) => (workplaceLozenge[row.original.workplaceType] ? <WorkplaceLozenge type={row.original.workplaceType} /> : "—"),
+  }),
+  helper.accessor((job) => (job.postedAt ? new Date(job.postedAt) : new Date(0)), {
+    id: "posted",
+    header: "Posted",
+    sortFn: "datetime",
+    cell: ({ row }) => formatRelativeTime(row.original.postedAt) ?? "—",
+    meta: { cellClassName: "whitespace-nowrap text-subtle" } satisfies DataTableColumnMeta,
+  }),
+  helper.display({
+    id: "save",
+    header: () => <span className="sr-only">Save</span>,
+    cell: ({ row }) => (
+      <div className="flex justify-end gap-1.5">
+        <EmailHrButton posting={row.original} />
+        <SaveJobButton posting={row.original} />
+      </div>
+    ),
+    enableSorting: false,
+    meta: { cellClassName: "text-right" } satisfies DataTableColumnMeta,
+  }),
+]);
+
+/** Search results in the shared list table (cards when the content area is narrow), sortable by any column. */
 export function JobResults({ jobs }: { jobs: JobPosting[] }) {
+  // Empty = the order the search returned (best match first)
+  const [sorting, setSorting] = useState<SortingState>([]);
+  const table = useTable({
+    features,
+    columns,
+    data: jobs,
+    getRowId: (job) => job.id,
+    state: { sorting },
+    onSortingChange: setSorting,
+  });
+
   return (
-    <div className="@container">
-      <ul className="divide-y divide-border border-y border-border @4xl:hidden">
-        {jobs.map((job) => {
-          const posted = formatRelativeTime(job.postedAt);
-          return (
-            <li key={job.id} className="flex flex-col gap-1 py-3">
-              <div className="flex items-start justify-between gap-3">
-                <JobLink job={job} />
+    <DataTable
+      table={table}
+      label="Job results"
+      renderCard={(row) => {
+        const job = row.original;
+        const posted = formatRelativeTime(job.postedAt);
+        return (
+          <div className="flex flex-col gap-1">
+            <div className="flex items-start justify-between gap-3">
+              <JobLink job={job} />
+              <div className="flex shrink-0 gap-1.5">
+                <EmailHrButton posting={job} />
                 <SaveJobButton posting={job} />
               </div>
-              <p className="text-sm">
-                {job.company}
-                {job.location && <span className="text-subtle"> · {job.location}</span>}
-              </p>
-              <ContactEmail job={job} />
-              <div className="flex flex-wrap items-center gap-1.5 pt-0.5">
-                <Lozenge>{roleLabel[job.techRole]}</Lozenge>
-                <WorkplaceLozenge type={job.workplaceType} />
-                <span className="text-xs text-subtlest">
-                  {[posted, job.department, sourceLabel(job)].filter(Boolean).join(" · ")}
-                </span>
-              </div>
-            </li>
-          );
-        })}
-      </ul>
-
-      <div className="hidden @4xl:block">
-        <Table>
-          <TableHeader>
-            <TableRow>
-              <TableHead>Job</TableHead>
-              <TableHead>Company</TableHead>
-              <TableHead>Role</TableHead>
-              <TableHead>Location</TableHead>
-              <TableHead>Work mode</TableHead>
-              <TableHead>Posted</TableHead>
-              <TableHead>
-                <span className="sr-only">Save</span>
-              </TableHead>
-            </TableRow>
-          </TableHeader>
-          <TableBody>
-            {jobs.map((job) => (
-              <TableRow key={job.id}>
-                <TableCell className="max-w-md">
-                  <JobLink job={job} />
-                  {job.department && <p className="line-clamp-2 text-xs text-subtlest">{job.department}</p>}
-                </TableCell>
-                <TableCell className="whitespace-nowrap">
-                  {job.company}
-                  <p className="text-xs text-subtlest">{sourceLabel(job)}</p>
-                  <ContactEmail job={job} />
-                </TableCell>
-                <TableCell className="whitespace-nowrap">
-                  <Lozenge>{roleLabel[job.techRole]}</Lozenge>
-                </TableCell>
-                <TableCell className="max-w-56 text-subtle">{job.location ?? "—"}</TableCell>
-                <TableCell>
-                  {workplaceLozenge[job.workplaceType] ? <WorkplaceLozenge type={job.workplaceType} /> : "—"}
-                </TableCell>
-                <TableCell className="whitespace-nowrap text-subtle">
-                  {formatRelativeTime(job.postedAt) ?? "—"}
-                </TableCell>
-                <TableCell className="text-right">
-                  <SaveJobButton posting={job} />
-                </TableCell>
-              </TableRow>
-            ))}
-          </TableBody>
-        </Table>
-      </div>
-    </div>
+            </div>
+            <p className="text-sm">
+              {job.company}
+              {job.location && <span className="text-subtle"> · {job.location}</span>}
+            </p>
+            <ContactEmail job={job} />
+            <div className="flex flex-wrap items-center gap-1.5">
+              <Lozenge>{roleLabel[job.techRole]}</Lozenge>
+              <WorkplaceLozenge type={job.workplaceType} />
+              <span className="text-xs text-subtlest">
+                {[posted, job.department, sourceLabel(job)].filter(Boolean).join(" · ")}
+              </span>
+            </div>
+          </div>
+        );
+      }}
+    />
   );
 }
 
@@ -122,12 +172,8 @@ function sourceLabel(job: JobPosting) {
   return job.alsoOn?.length ? `${job.source} · also on ${job.alsoOn.join(", ")}` : job.source;
 }
 
-/** The hiring email from the post itself, as a mail link (only shown when the company published one). */
+/** The hiring email from the post itself (only shown when the company published one). */
 function ContactEmail({ job }: { job: JobPosting }) {
   if (!job.contactEmail) return null;
-  return (
-    <a href={`mailto:${job.contactEmail}`} className="block max-w-full truncate text-xs text-link hover:underline">
-      {job.contactEmail}
-    </a>
-  );
+  return <p className="max-w-full truncate text-xs text-subtle" title="HR email from the post">{job.contactEmail}</p>;
 }

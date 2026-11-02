@@ -5,6 +5,8 @@ type UserResource = NonNullable<ReturnType<typeof useUser>["user"]>;
 /** Google permissions CareerPilot uses. Each is asked for only when the user turns that feature on. */
 export const GOOGLE_SCOPES = {
   gmailSend: "https://www.googleapis.com/auth/gmail.send",
+  /** Message headers only (never bodies): shows bounces and replies to emails CareerPilot sent */
+  gmailMetadata: "https://www.googleapis.com/auth/gmail.metadata",
   driveFile: "https://www.googleapis.com/auth/drive.file",
 } as const;
 
